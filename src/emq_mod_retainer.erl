@@ -18,8 +18,6 @@
 
 -behaviour(gen_server).
 
--behaviour(emqttd_gen_mod).
-
 -include_lib("emqttd/include/emqttd.hrl").
 
 -include_lib("emqttd/include/emqttd_internal.hrl").
@@ -88,7 +86,7 @@ is_too_big(Size, Env) ->
     Limit = proplists:get_value(max_payload_size, Env, 0),
     Limit > 0 andalso (Size > Limit).
 
-unload(_Env) ->
+unload() ->
     emqttd:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
     emqttd:unhook('message.publish', fun ?MODULE:on_message_publish/2).
 
