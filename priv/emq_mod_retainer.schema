@@ -1,0 +1,23 @@
+%%-*- mode: erlang -*-
+%% Retainer config mapping
+
+{mapping, "module.retainer.storage_type", "emq_mod_retainer.storage_type", [
+  {default, ram},
+  {datatype, {enum, [disc, ram]}}
+]}.
+
+{mapping, "module.retainer.max_message_num", "emq_mod_retainer.max_message_num", [
+  {default, 100000},
+  {datatype, integer}
+]}.
+
+{mapping, "module.retainer.max_payload_size", "emq_mod_retainer.max_payload_size", [
+  {default, "64KB"},
+  {datatype, bytesize}
+]}.
+
+{mapping, "module.retainer.expired_after", "emq_mod_retainer.expired_after", [
+  {default, 0},
+  {datatype, integer}
+]}.
+
