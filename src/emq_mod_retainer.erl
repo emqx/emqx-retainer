@@ -14,7 +14,7 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqttd_mod_retainer).
+-module(emq_mod_retainer).
 
 -behaviour(gen_server).
 
