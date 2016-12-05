@@ -18,7 +18,7 @@
 
 -behaviour(application).
 
--export([start/2, prep_stop/1, stop/1]).
+-export([start/2, stop/1]).
 
 start(_Type, _Args) ->
     Env = application:get_all_env(emq_mod_retainer),
@@ -26,9 +26,7 @@ start(_Type, _Args) ->
     emq_mod_retainer:load(Env),
     {ok, Sup}.
 
-prep_stop(State) ->
-    emq_mod_retainer:unload(), State.
-
 stop(_State) ->
+    emq_mod_retainer:unload(),
     ok.
 
