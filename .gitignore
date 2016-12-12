@@ -11,3 +11,4 @@ rel/example_project
 data/
 *.swp
 *.swo
+.erlang.mk/
