@@ -116,6 +116,12 @@ init([Env]) ->
                 {storage_properties, [{ets, [compressed]},
                                       {dets, [{auto_save, 1000}]}]}]),
     ok = emqttd_mnesia:copy_table(mqtt_retained),
+    StorageType = mnesia:table_info(mqtt_retained, storage_type),
+    case StorageType =/= Copy of
+    	true -> mnesia:change_table_copy_type(mqtt_retained, node(), Copy);
+        false -> ok
+    end,
+    
     StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
