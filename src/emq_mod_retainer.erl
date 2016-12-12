@@ -118,7 +118,7 @@ init([Env]) ->
     ok = emqttd_mnesia:copy_table(mqtt_retained),
     StorageType = mnesia:table_info(mqtt_retained, storage_type),
     case StorageType =/= Copy of
-    	true -> mnesia:change_table_copy_type(mqtt_retained, node(), Copy);
+        true -> mnesia:change_table_copy_type(mqtt_retained, node(), Copy);
         false -> ok
     end,
     
