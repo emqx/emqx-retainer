@@ -12,3 +12,4 @@ data/
 *.swp
 *.swo
 .erlang.mk/
+emq_mod_retainer.d
