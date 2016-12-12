@@ -104,18 +104,22 @@ start_link(Env) ->
 %%--------------------------------------------------------------------
 
 init([Env]) ->
-    Copy = case proplists:get_value(storage_type, Env, disc) of
-               disc -> disc_copies;
-               ram  -> ram_copies
-           end,
+    Copies = case proplists:get_value(storage_type, Env, disc) of
+                 disc -> disc_copies;
+                 ram  -> ram_copies
+             end,
     ok = emqttd_mnesia:create_table(mqtt_retained, [
                 {type, ordered_set},
-                {Copy, [node()]},
+                {Copies, [node()]},
                 {record_name, mqtt_retained},
                 {attributes, record_info(fields, mqtt_retained)},
                 {storage_properties, [{ets, [compressed]},
                                       {dets, [{auto_save, 1000}]}]}]),
     ok = emqttd_mnesia:copy_table(mqtt_retained),
+    case mnesia:table_info(mqtt_retained, storage_type) of
+        Copies -> ok;
+        _      -> mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
+    end,
     StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},

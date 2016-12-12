@@ -10,7 +10,8 @@ etc/emq_mod_retainer.conf:
 
 ```
 ## disc: disc_copies, ram: ram_copies
-module.retainer.storage_type = ram
+## Notice: retainer's storage_type on each node in a cluster must be the same!
+module.retainer.storage_type = disc
 
 ## Max number of retained messages
 module.retainer.max_message_num = 100000
