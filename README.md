@@ -10,7 +10,8 @@ etc/emq_mod_retainer.conf:
 
 ```
 ## disc: disc_copies, ram: ram_copies
-module.retainer.storage_type = ram
+## Cluster environment, storage_type of each node must be consistent
+module.retainer.storage_type = disc
 
 ## Max number of retained messages
 module.retainer.max_message_num = 100000
