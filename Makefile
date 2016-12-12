@@ -1,6 +1,6 @@
 PROJECT = emq_mod_retainer
 PROJECT_DESCRIPTION = Retainer Module
-PROJECT_VERSION = 2.0.1
+PROJECT_VERSION = 2.0.3
 
 BUILD_DEPS = emqttd
 dep_emqttd = git https://github.com/emqtt/emqttd master
