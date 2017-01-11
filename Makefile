@@ -1,6 +1,6 @@
 PROJECT = emq_mod_retainer
 PROJECT_DESCRIPTION = Retainer Module
-PROJECT_VERSION = 2.0.5
+PROJECT_VERSION = 2.0.7
 
 BUILD_DEPS = emqttd cuttlefish
 dep_emqttd = git https://github.com/emqtt/emqttd master
