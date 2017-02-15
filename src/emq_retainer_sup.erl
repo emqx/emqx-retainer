@@ -14,7 +14,9 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emq_mod_retainer_sup).
+-module(emq_retainer_sup).
+
+-author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(supervisor).
 
@@ -22,7 +24,7 @@
 
 -export([init/1]).
 
--define(M, emq_mod_retainer).
+-define(M, emq_retainer).
 
 start_link(Env) ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, [Env]).

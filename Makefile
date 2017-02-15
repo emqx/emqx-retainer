@@ -1,6 +1,6 @@
-PROJECT = emq_mod_retainer
-PROJECT_DESCRIPTION = Retainer Module
-PROJECT_VERSION = 2.0.7
+PROJECT = emq_retainer
+PROJECT_DESCRIPTION = EMQ Retainer
+PROJECT_VERSION = 2.1
 
 BUILD_DEPS = emqttd cuttlefish
 dep_emqttd = git https://github.com/emqtt/emqttd master
@@ -11,5 +11,5 @@ ERLC_OPTS += +'{parse_transform, lager_transform}'
 include erlang.mk
 
 app.config::
-	./deps/cuttlefish/cuttlefish -l info -e etc/ -c etc/emq_mod_retainer.conf -i priv/emq_mod_retainer.schema -d data
+	./deps/cuttlefish/cuttlefish -l info -e etc/ -c etc/emq_retainer.conf -i priv/emq_retainer.schema -d data
 
