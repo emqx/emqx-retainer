@@ -3,7 +3,8 @@ PROJECT_DESCRIPTION = EMQ Retainer
 PROJECT_VERSION = 2.1
 
 BUILD_DEPS = emqttd cuttlefish
-dep_emqttd = git https://github.com/emqtt/emqttd master
+
+dep_emqttd     = git https://github.com/emqtt/emqttd master
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 ERLC_OPTS += +'{parse_transform, lager_transform}'

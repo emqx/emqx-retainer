@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2012-2017 Feng Lee <feng@emqtt.io>.
+%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = P
         {false, false} ->
             mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqttd_time:now_ms(Ts)}),
             emqttd_metrics:set('messages/retained', retained_count());
-        {true, _}->
+        {true, _} ->
             lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
             lager:error("Cannot retain message(topic=~s, payload_size=~p) "
