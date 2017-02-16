@@ -1,5 +1,5 @@
 %%-*- mode: erlang -*-
-%% EMQ Retainer config mapping
+%% Retainer config mapping
 
 {mapping, "retainer.storage_type", "emqttd_retainer.storage_type", [
   {default, ram},
