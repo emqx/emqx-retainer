@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2012-2017 Feng Lee <feng@emqtt.io>.
+%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,19 +14,20 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emq_mod_retainer_app).
+-module(emq_retainer_app).
+
+-author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(application).
 
 -export([start/2, stop/1]).
 
 start(_Type, _Args) ->
-    Env = application:get_all_env(emq_mod_retainer),
-    {ok, Sup} = emq_mod_retainer_sup:start_link(Env),
-    emq_mod_retainer:load(Env),
+    Env = application:get_all_env(emq_retainer),
+    {ok, Sup} = emq_retainer_sup:start_link(Env),
+    emq_retainer:load(Env),
     {ok, Sup}.
 
 stop(_State) ->
-    emq_mod_retainer:unload(),
-    ok.
+    emq_retainer:unload().
 
