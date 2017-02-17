@@ -1,26 +1,28 @@
-emq_mod_retainer
-================
 
-Retainer Module
+EMQ Retainer
+============
 
 Configuration
 -------------
 
-etc/emq_mod_retainer.conf:
+etc/emq_retainer.conf:
 
 ```
 ## disc: disc_copies, ram: ram_copies
 ## Notice: retainer's storage_type on each node in a cluster must be the same!
-module.retainer.storage_type = disc
+retainer.storage_type = disc
 
 ## Max number of retained messages
-module.retainer.max_message_num = 100000
+retainer.max_message_num = 1000000
 
 ## Max Payload Size of retained message
-module.retainer.max_payload_size = 64KB
+retainer.max_payload_size = 64KB
 
-## Expired after seconds, never expired if 0
-module.retainer.expired_after = 0
+## Expiry interval. Never expired if 0
+## h - hour
+## m - minute
+## s - second
+retainer.expiry_interval = 0
 ```
 
 License
@@ -31,5 +33,5 @@ Apache License Version 2.0
 Author
 ------
 
-feng at emqtt.io
+Feng at emqtt.io
 

@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2012-2017 Feng Lee <feng@emqtt.io>.
+%% Copyright (c) 2013-2017 EMQ Enterprise, Inc. (http://emqtt.io)
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emq_mod_retainer).
+-module(emq_retainer).
+
+-author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(gen_server).
 
@@ -37,9 +39,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(mqtt_retained, {topic, msg}).
+-record(mqtt_retained, {topic, msg, ts}).
 
--record(state, {stats_fun, expired_after, stats_timer, expire_timer}).
+-record(state, {stats_fun, expiry_interval, stats_timer, expire_timer}).
 
 %%--------------------------------------------------------------------
 %% Load/Unload
@@ -65,16 +67,16 @@ on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <
     mnesia:dirty_delete(mqtt_retained, Topic),
     {stop, Msg};
 
-on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = Payload}, Env) ->
+on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg}),
+            mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqttd_time:now_ms(Ts)}),
             emqttd_metrics:set('messages/retained', retained_count());
-       {true, _}->
+        {true, _} ->
             lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
-       {_, true}->
-            lager:error("Cannot retain message(topic=~s, payload_size=~p)"
-                            " for payload is too big!", [Topic, size(Payload)])
+        {_, true}->
+            lager:error("Cannot retain message(topic=~s, payload_size=~p) "
+                        "for payload is too big!", [Topic, byte_size(Payload)])
     end,
     {ok, Msg#mqtt_message{retain = false}}.
 
@@ -123,15 +125,15 @@ init([Env]) ->
     StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
-    {ok, init_expire_timer(proplists:get_value(expired_after, Env, 0), State)}.
+    {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
 
-init_expire_timer(0, State) ->
+start_expire_timer(0, State) ->
     State;
-init_expire_timer(undefined, State) ->
+start_expire_timer(undefined, State) ->
     State;
-init_expire_timer(Secs, State) ->
-    {ok, Timer} = timer:send_interval(timer:seconds(Secs), expire),
-    State#state{expired_after = Secs, expire_timer = Timer}.
+start_expire_timer(Ms, State) ->
+    {ok, Timer} = timer:send_interval(Ms, expire),
+    State#state{expiry_interval = Ms, expire_timer = Timer}.
 
 handle_call(Req, _From, State) ->
     ?UNEXPECTED_REQ(Req, State).
@@ -143,20 +145,19 @@ handle_info(stats, State = #state{stats_fun = StatsFun}) ->
     StatsFun(retained_count()),
     {noreply, State, hibernate};
 
-handle_info(expire, State = #state{expired_after = Never})
+handle_info(expire, State = #state{expiry_interval = Never})
     when Never =:= 0 orelse Never =:= undefined ->
     {noreply, State, hibernate};
 
-handle_info(expire, State = #state{expired_after = ExpiredAfter}) ->
-    expire_messages(emqttd_time:now_to_secs() - ExpiredAfter),
+handle_info(expire, State = #state{expiry_interval = Interval}) ->
+    expire_messages(emqttd_time:now_ms() - Interval),
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
     ?UNEXPECTED_INFO(Info, State).
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expire_timer = TRef2}) ->
-    timer:cancel(TRef1),
-    timer:cancel(TRef2).
+    timer:cancel(TRef1), timer:cancel(TRef2).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -185,7 +186,7 @@ expire_messages(Time) when is_integer(Time) ->
     mnesia:transaction(
         fun() ->
             Match = ets:fun2ms(
-                        fun(#mqtt_retained{topic = Topic, msg = #mqtt_message{timestamp = Ts}})
+                        fun(#mqtt_retained{topic = Topic, ts = Ts})
                             when Time > Ts -> Topic
                         end),
             Topics = mnesia:select(mqtt_retained, Match, write),
