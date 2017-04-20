@@ -1,6 +1,6 @@
 PROJECT = emq_retainer
 PROJECT_DESCRIPTION = EMQ Retainer
-PROJECT_VERSION = 2.1.1
+PROJECT_VERSION = 2.1.2
 
 BUILD_DEPS = emqttd cuttlefish
 
