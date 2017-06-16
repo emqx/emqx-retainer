@@ -110,14 +110,14 @@ init([Env]) ->
                  disc -> disc_copies;
                  ram  -> ram_copies
              end,
-    ok = emqttd_mnesia:create_table(mqtt_retained, [
+    ok = ekka_mnesia:create_table(mqtt_retained, [
                 {type, ordered_set},
                 {Copies, [node()]},
                 {record_name, mqtt_retained},
                 {attributes, record_info(fields, mqtt_retained)},
                 {storage_properties, [{ets, [compressed]},
                                       {dets, [{auto_save, 1000}]}]}]),
-    ok = emqttd_mnesia:copy_table(mqtt_retained),
+    ok = ekka_mnesia:copy_table(mqtt_retained),
     case mnesia:table_info(mqtt_retained, storage_type) of
         Copies -> ok;
         _      -> mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
