@@ -106,12 +106,13 @@ start_link(Env) ->
 %%--------------------------------------------------------------------
 
 init([Env]) ->
-    Copies = case proplists:get_value(storage_type, Env, disc) of
-                 disc -> disc_copies;
-                 ram  -> ram_copies
-             end,
+    {Type, Copies} = case proplists:get_value(storage_type, Env, disc) of
+                         ram       -> {ordered_set, ram_copies};
+                         disc      -> {ordered_set, disc_copies};
+                         disc_only -> {set, disc_only_copies}
+                     end,
     ok = emqttd_mnesia:create_table(mqtt_retained, [
-                {type, ordered_set},
+                {type, Type},
                 {Copies, [node()]},
                 {record_name, mqtt_retained},
                 {attributes, record_info(fields, mqtt_retained)},
