@@ -3,7 +3,7 @@
 
 {mapping, "retainer.storage_type", "emq_retainer.storage_type", [
   {default, ram},
-  {datatype, {enum, [disc, ram]}}
+  {datatype, {enum, [ram, disc, disc_only]}}
 ]}.
 
 {mapping, "retainer.max_message_num", "emq_retainer.max_message_num", [
