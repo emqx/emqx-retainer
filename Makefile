@@ -7,8 +7,7 @@ DEPS = clique
 dep_clique  = git https://github.com/turtleDeng/clique
 
 BUILD_DEPS = emqttd cuttlefish
-
-dep_emqttd     = git https://github.com/emqtt/emqttd master
+dep_emqttd     = git https://github.com/emqtt/emqttd develop
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 NO_AUTOPATCH = cuttlefish
