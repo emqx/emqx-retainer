@@ -26,8 +26,10 @@ start(_Type, _Args) ->
     Env = application:get_all_env(emq_retainer),
     {ok, Sup} = emq_retainer_sup:start_link(Env),
     emq_retainer:load(Env),
+    emq_retainer_config:register(),
     {ok, Sup}.
 
 stop(_State) ->
-    emq_retainer:unload().
+    emq_retainer:unload(),
+    emq_retainer_config:unregister().
 
