@@ -2,9 +2,12 @@ PROJECT = emq_retainer
 PROJECT_DESCRIPTION = EMQ Retainer
 PROJECT_VERSION = 2.3
 
-BUILD_DEPS = emqttd cuttlefish
+DEPS = clique
 
-dep_emqttd     = git https://github.com/emqtt/emqttd emq24
+dep_clique  = git https://github.com/emqtt/clique
+
+BUILD_DEPS = emqttd cuttlefish
+dep_emqttd     = git https://github.com/emqtt/emqttd develop
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 NO_AUTOPATCH = cuttlefish
