@@ -38,7 +38,7 @@ register_config() ->
     [clique:register_config(Key , fun config_callback/2) || Key <- Keys],
     clique:register_config_whitelist(Keys, ?APP).
 
-config_callback([_, _, Key], Value) ->
+config_callback([_, Key], Value) ->
     application:set_env(?APP, list_to_atom(Key), Value),
     " successfully\n".
 
