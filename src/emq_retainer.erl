@@ -65,7 +65,7 @@ on_message_publish(Msg = #mqtt_message{retain = false}, _Env) ->
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <<>>}, _Env) ->
     mnesia:dirty_delete(mqtt_retained, Topic),
-    {stop, Msg};
+    {ok, Msg};
 
 on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
