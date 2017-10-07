@@ -15,6 +15,11 @@ NO_AUTOPATCH = cuttlefish
 ERLC_OPTS += +debug_info
 ERLC_OPTS += +'{parse_transform, lager_transform}'
 
+TEST_ERLC_OPTS += +debug_info
+TEST_ERLC_OPTS += +'{parse_transform, lager_transform}'
+
+COVER = true
+
 include erlang.mk
 
 app.config::
