@@ -1,15 +1,15 @@
 
-EMQ Retainer
-============
+EMQ X Retainer
+==============
 
 Configuration
 -------------
 
-etc/emq_retainer.conf:
+etc/emqx_retainer.conf:
 
 ```
-## disc: disc_copies, ram: ram_copies
-## Notice: retainer's storage_type on each node in a cluster must be the same!
+## disc: disc_copies, ram: ram_copies, disc_only: disc_only_copies
+## Notice: retainer's storage_type on each node in a cluster should be same.
 retainer.storage_type = disc
 
 ## Max number of retained messages
@@ -33,5 +33,5 @@ Apache License Version 2.0
 Author
 ------
 
-Feng at emqtt.io
+EMQ X-Men Team
 

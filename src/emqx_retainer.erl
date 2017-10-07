@@ -14,15 +14,15 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emq_retainer).
+-module(emqx_retainer).
 
 -author("Feng Lee <feng@emqtt.io>").
 
 -behaviour(gen_server).
 
--include_lib("emqttd/include/emqttd.hrl").
+-include_lib("emqx/include/emqx.hrl").
 
--include_lib("emqttd/include/emqttd_internal.hrl").
+-include_lib("emqx/include/emqx_macros.hrl").
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
@@ -48,12 +48,12 @@
 %%--------------------------------------------------------------------
 
 load(Env) ->
-    emqttd:hook('session.subscribed', fun ?MODULE:on_session_subscribed/4, [Env]),
-    emqttd:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
+    emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/4, [Env]),
+    emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
 on_session_subscribed(_ClientId, _Username, {Topic, _Opts}, _Env) ->
     SessPid = self(),
-    Msgs = case emqttd_topic:wildcard(Topic) of
+    Msgs = case emqx_topic:wildcard(Topic) of
                false -> read_messages(Topic);
                true  -> match_messages(Topic)
            end,
@@ -70,8 +70,8 @@ on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <
 on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqttd_time:now_ms(Ts)}),
-            emqttd_metrics:set('messages/retained', retained_count());
+            mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}),
+            emqx_metrics:set('messages/retained', retained_count());
         {true, _} ->
             lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
@@ -89,8 +89,8 @@ is_too_big(Size, Env) ->
     Limit > 0 andalso (Size > Limit).
 
 unload() ->
-    emqttd:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
-    emqttd:unhook('message.publish', fun ?MODULE:on_message_publish/2).
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
+    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2).
 
 %%--------------------------------------------------------------------
 %% API
@@ -123,7 +123,7 @@ init([Env]) ->
         Copies -> ok;
         _      -> mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
     end,
-    StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
+    StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
     {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
@@ -151,7 +151,7 @@ handle_info(expire, State = #state{expiry_interval = Never})
     {noreply, State, hibernate};
 
 handle_info(expire, State = #state{expiry_interval = Interval}) ->
-    expire_messages(emqttd_time:now_ms() - Interval),
+    expire_messages(emqx_time:now_ms() - Interval),
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
@@ -175,7 +175,7 @@ read_messages(Topic) ->
 match_messages(Filter) ->
     %% TODO: optimize later...
     Fun = fun(#mqtt_retained{topic = Name, msg = Msg}, Acc) ->
-            case emqttd_topic:match(Name, Filter) of
+            case emqx_topic:match(Name, Filter) of
                 true -> [Msg|Acc];
                 false -> Acc
             end
