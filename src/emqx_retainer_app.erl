@@ -26,10 +26,10 @@ start(_Type, _Args) ->
     Env = application:get_all_env(emqx_retainer),
     {ok, Sup} = emqx_retainer_sup:start_link(Env),
     emqx_retainer:load(Env),
-    emqx_retainer_config:register(),
+    emqx_retainer_cfg:register(),
     {ok, Sup}.
 
 stop(_State) ->
     emqx_retainer:unload(),
-    emqx_retainer_config:unregister().
+    emqx_retainer_cfg:unregister().
 
