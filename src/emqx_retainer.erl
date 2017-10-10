@@ -22,7 +22,7 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--include_lib("emqx/include/emqx_macros.hrl").
+-include_lib("emqx/include/emqx_internal.hrl").
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
