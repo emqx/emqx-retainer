@@ -41,7 +41,7 @@
 
 -record(mqtt_retained, {topic, msg, ts}).
 
--record(state, {stats_fun, expiry_interval, stats_timer, expire_timer}).
+-record(state, {expiry_interval}).
 
 %%--------------------------------------------------------------------
 %% Load/Unload
@@ -123,18 +123,15 @@ init([Env]) ->
         Copies -> ok;
         _      -> mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
     end,
-    StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
-    {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
-    State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
-    {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
+    erlang:send_after(timer:seconds(1), self(), stats),
+    ExpireInterval= proplists:get_value(expiry_interval, Env, undefined),
+    {ok, start_expire_timer(ExpireInterval, #state{})}.
 
-start_expire_timer(0, State) ->
-    State;
-start_expire_timer(undefined, State) ->
-    State;
-start_expire_timer(Ms, State) ->
-    {ok, Timer} = timer:send_interval(Ms, expire),
-    State#state{expiry_interval = Ms, expire_timer = Timer}.
+start_expire_timer(Ms, State)when is_integer(Ms) andalso Ms >= 0 ->
+    erlang:send_after(Ms, self(), expire),
+    State#state{expiry_interval = Ms};
+start_expire_timer(_Ms, State) ->
+    State.
 
 handle_call(Req, _From, State) ->
     ?UNEXPECTED_REQ(Req, State).
@@ -142,8 +139,9 @@ handle_call(Req, _From, State) ->
 handle_cast(Msg, State) ->
     ?UNEXPECTED_MSG(Msg, State).
 
-handle_info(stats, State = #state{stats_fun = StatsFun}) ->
-    StatsFun(retained_count()),
+handle_info(stats, State) ->
+    emqttd_stats:setstats('retained/count', 'retained/max', retained_count()),
+    erlang:send_after(timer:seconds(1), self(), stats),
     {noreply, State, hibernate};
 
 handle_info(expire, State = #state{expiry_interval = Never})
@@ -152,13 +150,14 @@ handle_info(expire, State = #state{expiry_interval = Never})
 
 handle_info(expire, State = #state{expiry_interval = Interval}) ->
     expire_messages(emqttd_time:now_ms() - Interval),
+    erlang:send_after(Interval, self(), expire),
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
     ?UNEXPECTED_INFO(Info, State).
 
-terminate(_Reason, _State = #state{stats_timer = TRef1, expire_timer = TRef2}) ->
-    timer:cancel(TRef1), timer:cancel(TRef2).
+terminate(_Reason, _State) ->
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -198,4 +197,3 @@ expire_messages(Time) when is_integer(Time) ->
 
 -spec(retained_count() -> non_neg_integer()).
 retained_count() -> mnesia:table_info(mqtt_retained, size).
-
