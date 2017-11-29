@@ -67,7 +67,14 @@ on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <
     mnesia:dirty_delete(mqtt_retained, Topic),
     {ok, Msg};
 
-on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = Payload, timestamp = Ts}, Env) ->
+on_message_publish(Msg = #mqtt_message{retain = true, headers = Headers}, Env) ->
+    case lists:member(retained, Headers) of
+        true  -> {ok, Msg};
+        false -> store_retained(Msg, Env),
+                 {ok, Msg#mqtt_message{headers = lists:umerge([retained], Headers)}}
+    end.
+
+store_retained(Msg = #mqtt_message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
             mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqttd_time:now_ms(Ts)}),
@@ -77,8 +84,7 @@ on_message_publish(Msg = #mqtt_message{topic = Topic, retain = true, payload = P
         {_, true}->
             lager:error("Cannot retain message(topic=~s, payload_size=~p) "
                         "for payload is too big!", [Topic, byte_size(Payload)])
-    end,
-    {ok, Msg#mqtt_message{retain = false}}.
+    end.
 
 is_table_full(Env) ->
     Limit = proplists:get_value(max_message_num, Env, 0),
