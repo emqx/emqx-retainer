@@ -20,6 +20,8 @@
 
 -behaviour(gen_server).
 
+-include("emq_retainer.hrl").
+
 -include_lib("emqttd/include/emqttd.hrl").
 
 -include_lib("emqttd/include/emqttd_internal.hrl").
@@ -38,8 +40,6 @@
 %% gen_server Function Exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--record(mqtt_retained, {topic, msg, ts}).
 
 -record(state, {stats_fun, expiry_interval, stats_timer, expire_timer}).
 
