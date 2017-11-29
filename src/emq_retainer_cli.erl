@@ -25,10 +25,10 @@
 load() -> emqttd_ctl:register_cmd(retainer, {?MODULE, cmd}, []).
 
 cmd(["info"]) ->
-    ?PRINT("retained/total: ~p~n", [mnesia:table_info(mqtt_retained, size)]);
+    ?PRINT("retained/total: ~w~n", [mnesia:table_info(mqtt_retained, size)]);
 
 cmd(["topics"]) ->
-    case mnesia:dirty_select(mqtt_retained, [{#mqtt_retained{topic='$1', _='_'}, [], ['$1']}]) of
+    case mnesia:dirty_all_keys(mqtt_retained) of
         [] -> ignore;
         Ts -> ?PRINT("~s~n", [lists:join("\n", Ts)])
     end;
