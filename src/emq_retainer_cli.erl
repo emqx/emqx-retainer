@@ -29,8 +29,8 @@ cmd(["info"]) ->
 
 cmd(["topics"]) ->
     case mnesia:dirty_all_keys(mqtt_retained) of
-        [] -> ignore;
-        Ts -> ?PRINT("~s~n", [lists:join("\n", Ts)])
+        []     -> ignore;
+        Topics -> lists:foreach(fun(Topic) -> ?PRINT("~s~n", [Topic]) end, Topics)
     end;
 
 cmd(["clean"]) ->
