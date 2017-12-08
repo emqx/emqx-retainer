@@ -1,6 +1,6 @@
 PROJECT = emqx_retainer
 PROJECT_DESCRIPTION = EMQ X Retainer
-PROJECT_VERSION = 2.3.0
+PROJECT_VERSION = 2.3.1
 
 DEPS = clique
 dep_clique  = git https://github.com/emqtt/clique

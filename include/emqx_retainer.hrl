@@ -14,23 +14,5 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--module(emqx_retainer_app).
+-record(mqtt_retained, {topic, msg, ts}).
 
--author("Feng Lee <feng@emqtt.io>").
-
--behaviour(application).
-
--export([start/2, stop/1]).
-
-start(_Type, _Args) ->
-    Env = application:get_all_env(emqx_retainer),
-    {ok, Sup} = emqx_retainer_sup:start_link(Env),
-    emqx_retainer:load(Env),
-    emqx_retainer_cfg:register(),
-    emqx_retainer_cli:load(),
-    {ok, Sup}.
-
-stop(_State) ->
-    emqx_retainer_cli:unload(),
-    emqx_retainer:unload(),
-    emqx_retainer_cfg:unregister().
