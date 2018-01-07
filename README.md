@@ -2,26 +2,48 @@
 EMQ Retainer
 ============
 
+The retainer plugin is responsible for storing retained MQTT messages.
+
 Configuration
 -------------
 
 etc/emq_retainer.conf:
 
 ```
-## disc: disc_copies, ram: ram_copies
-## Notice: retainer's storage_type on each node in a cluster must be the same!
-retainer.storage_type = disc
+## Where to store the retained messages.
+## Notice that all nodes in a cluster are to have the same storage_type.
+##
+## Value: ram | disc | disc_only
+##  - ram: memory only
+##  - disc: both memory and disc
+##  - disc_only: disc only
+##
+## Default: ram
+retainer.storage_type = ram
 
-## Max number of retained messages
+## Maximum number of retained messages allowed.
+##
+## Value: Number >= 0
 retainer.max_message_num = 1000000
 
-## Max Payload Size of retained message
+## Maximum payload size of a retained message.
+##
+## Value: Bytes
 retainer.max_payload_size = 64KB
 
-## Expiry interval. Never expired if 0
-## h - hour
-## m - minute
-## s - second
+## Expiration interval of the retained messages. Never expire if the value is 0.
+##
+## Value: Duration
+##  - h: hour
+##  - m: minute
+##  - s: second
+##
+## Examples:
+##  - 2h:  2 hours
+##  - 30m: 30 minutes
+##  - 20s: 20 seconds
+##
+## Defaut: 0
 retainer.expiry_interval = 0
 ```
 
