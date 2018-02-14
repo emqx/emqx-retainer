@@ -1,21 +1,29 @@
 %%-*- mode: erlang -*-
 %% Retainer config mapping
 
+%% Storage Type
+%% {$configurable}
 {mapping, "retainer.storage_type", "emqx_retainer.storage_type", [
   {default, ram},
   {datatype, {enum, [ram, disc, disc_only]}}
 ]}.
 
+%% Maximum number of Retained Message
+%% {$configurable}
 {mapping, "retainer.max_message_num", "emqx_retainer.max_message_num", [
   {default, 1000000},
   {datatype, integer}
 ]}.
 
+%% Maximum payload sizeof Retained Message
+%% {$configurable}
 {mapping, "retainer.max_payload_size", "emqx_retainer.max_payload_size", [
   {default, "64KB"},
   {datatype, bytesize}
 ]}.
 
+%% Expiry Interval of Retained message
+%% {$configurable}
 {mapping, "retainer.expiry_interval", "emqx_retainer.expiry_interval", [
   {default, 0},
   {datatype, [integer, {duration, ms}]}
