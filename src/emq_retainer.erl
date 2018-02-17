@@ -57,7 +57,17 @@ on_session_subscribed(_ClientId, _Username, {Topic, _Opts}, _Env) ->
                false -> read_messages(Topic);
                true  -> match_messages(Topic)
            end,
-    lists:foreach(fun(Msg) -> SessPid ! {dispatch, Topic, Msg} end, lists:reverse(Msgs)).
+    lists:foreach(fun(Msg) -> SessPid ! {dispatch, Topic, Msg} end, sort_retained(Msgs)).
+
+sort_retained([]) ->
+    [];
+sort_retained([Msg]) ->
+    [Msg];
+sort_retained(Msgs) ->
+    lists:sort(fun(#mqtt_message{timestamp = Ts1},
+                   #mqtt_message{timestamp = Ts2}) ->
+                       Ts1 =< Ts2
+               end, Msgs).
 
 on_message_publish(Msg = #mqtt_message{retain = false}, _Env) ->
     {ok, Msg};
@@ -113,13 +123,13 @@ start_link(Env) ->
 %%--------------------------------------------------------------------
 
 init([Env]) ->
-    {Type, Copies} = case proplists:get_value(storage_type, Env, disc) of
-                         ram       -> {ordered_set, ram_copies};
-                         disc      -> {ordered_set, disc_copies};
-                         disc_only -> {set, disc_only_copies}
-                     end,
+    Copies = case proplists:get_value(storage_type, Env, disc) of
+                 ram       -> ram_copies;
+                 disc      -> disc_copies;
+                 disc_only -> disc_only_copies
+             end,
     ok = ekka_mnesia:create_table(mqtt_retained, [
-                {type, Type},
+                {type, set},
                 {Copies, [node()]},
                 {record_name, mqtt_retained},
                 {attributes, record_info(fields, mqtt_retained)},
@@ -128,7 +138,7 @@ init([Env]) ->
     ok = ekka_mnesia:copy_table(mqtt_retained),
     case mnesia:table_info(mqtt_retained, storage_type) of
         Copies -> ok;
-        _      -> mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
+        _      -> {atomic, ok} = mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
     end,
     StatsFun = emqttd_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
