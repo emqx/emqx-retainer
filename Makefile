@@ -1,12 +1,12 @@
 PROJECT = emqx_retainer
 PROJECT_DESCRIPTION = EMQ X Retainer
-PROJECT_VERSION = 2.4.1
+PROJECT_VERSION = 3.0
 
 DEPS = clique
 dep_clique  = git https://github.com/emqtt/clique
 
 BUILD_DEPS = emqx cuttlefish
-dep_emqx = git git@github.com:emqx/emqx-enterprise
+dep_emqx = git https://github.com/emqtt/emqttd emqx30
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 NO_AUTOPATCH = cuttlefish
