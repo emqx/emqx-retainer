@@ -1,6 +1,6 @@
 PROJECT = emq_retainer
 PROJECT_DESCRIPTION = EMQ Retainer
-PROJECT_VERSION = 2.3.4
+PROJECT_VERSION = 2.3.5
 
 DEPS = clique
 
@@ -19,4 +19,3 @@ include erlang.mk
 
 app.config::
 	./deps/cuttlefish/cuttlefish -l info -e etc/ -c etc/emq_retainer.conf -i priv/emq_retainer.schema -d data
-
