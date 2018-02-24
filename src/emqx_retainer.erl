@@ -16,11 +16,10 @@
 
 -module(emqx_retainer).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -behaviour(gen_server).
 
 -include("emqx_retainer.hrl").
+
 -include_lib("emqx/include/emqx.hrl").
 
 -include_lib("emqx/include/emqx_internal.hrl").

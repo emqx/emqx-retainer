@@ -16,8 +16,6 @@
 
 -module(emqx_retainer_sup).
 
--author("Feng Lee <feng@emqtt.io>").
-
 -behaviour(supervisor).
 
 -export([start_link/1]).
