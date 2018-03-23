@@ -14,5 +14,5 @@
 %% limitations under the License.
 %%--------------------------------------------------------------------
 
--record(mqtt_retained, {topic, msg, ts}).
+-record(retained, {topic, msg, ts}).
 

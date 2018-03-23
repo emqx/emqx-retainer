@@ -22,8 +22,6 @@
 
 -include_lib("emqx/include/emqx.hrl").
 
--include_lib("emqx/include/emqx_internal.hrl").
-
 -include_lib("stdlib/include/ms_transform.hrl").
 
 %% gen_mod Callbacks
@@ -62,31 +60,31 @@ sort_retained([]) ->
 sort_retained([Msg]) ->
     [Msg];
 sort_retained(Msgs) ->
-    lists:sort(fun(#mqtt_message{timestamp = Ts1},
-                   #mqtt_message{timestamp = Ts2}) ->
+    lists:sort(fun(#message{timestamp = Ts1},
+                   #message{timestamp = Ts2}) ->
                        Ts1 =< Ts2
                end, Msgs).
 
-on_message_publish(Msg = #mqtt_message{retain = false}, _Env) ->
+on_message_publish(Msg = #message{retain = false}, _Env) ->
     {ok, Msg};
 
 %% RETAIN flag set to 1 and payload containing zero bytes
-on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <<>>}, _Env) ->
-    mnesia:dirty_delete(mqtt_retained, Topic),
+on_message_publish(Msg = #message{retain = true, topic = Topic, payload = <<>>}, _Env) ->
+    mnesia:dirty_delete(retained, Topic),
     {ok, Msg};
 
-on_message_publish(Msg = #mqtt_message{retain = true, headers = Headers}, Env) ->
+on_message_publish(Msg = #message{retain = true, headers = Headers}, Env) ->
     case lists:member(retained, Headers) of
         true  -> {ok, Msg};
-        false -> Msg1 = Msg#mqtt_message{headers = lists:umerge([retained], Headers)},
+        false -> Msg1 = Msg#message{headers = lists:usort([retained|Headers)},
                  store_retained(Msg1, Env),
                  {ok, Msg1}
     end.
 
-store_retained(Msg = #mqtt_message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
+store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(#mqtt_retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}),
+            mnesia:dirty_write(#retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}),
             emqx_metrics:set('messages/retained', retained_count());
         {true, _} ->
             lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
@@ -126,17 +124,17 @@ init([Env]) ->
                  disc      -> disc_copies;
                  disc_only -> disc_only_copies
              end,
-    ok = ekka_mnesia:create_table(mqtt_retained, [
+    ok = ekka_mnesia:create_table(retained, [
                 {type, set},
                 {Copies, [node()]},
-                {record_name, mqtt_retained},
-                {attributes, record_info(fields, mqtt_retained)},
+                {record_name, retained},
+                {attributes, record_info(fields, retained)},
                 {storage_properties, [{ets, [compressed]},
                                       {dets, [{auto_save, 1000}]}]}]),
-    ok = ekka_mnesia:copy_table(mqtt_retained),
-    case mnesia:table_info(mqtt_retained, storage_type) of
+    ok = ekka_mnesia:copy_table(retained),
+    case mnesia:table_info(retained, storage_type) of
         Copies -> ok;
-        _      -> {atomic, ok} = mnesia:change_table_copy_type(mqtt_retained, node(), Copies)
+        _      -> {atomic, ok} = mnesia:change_table_copy_type(retained, node(), Copies)
     end,
     StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
@@ -152,10 +150,12 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_interval = Ms, expire_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    ?UNEXPECTED_REQ(Req, State).
+    emqx_log:error("[Retainer] Uexpected request: ~p", [Req]),
+    {reply, ignore, State}.
 
 handle_cast(Msg, State) ->
-    ?UNEXPECTED_MSG(Msg, State).
+    emqx_log:error("[Retainer] Uexpected msg: ~p", [Msg]),
+    {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
     StatsFun(retained_count()),
@@ -170,7 +170,8 @@ handle_info(expire, State = #state{expiry_interval = Interval}) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    ?UNEXPECTED_INFO(Info, State).
+    emqx_log:error("[Retainer] Uexpected info: ~p", [Info]),
+    {noreply, State}.
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expire_timer = TRef2}) ->
     timer:cancel(TRef1), timer:cancel(TRef2).
@@ -179,30 +180,30 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%--------------------------------------------------------------------
-%% Internal Functions
+%% Internal functions
 %%--------------------------------------------------------------------
 
--spec(read_messages(binary()) -> [mqtt_message()]).
+-spec(read_messages(binary()) -> [message()]).
 read_messages(Topic) ->
-    [Msg || #mqtt_retained{msg = Msg} <- mnesia:dirty_read(mqtt_retained, Topic)].
+    [Msg || #retained{msg = Msg} <- mnesia:dirty_read(retained, Topic)].
 
--spec(match_messages(binary()) -> [mqtt_message()]).
+-spec(match_messages(binary()) -> [message()]).
 match_messages(Filter) ->
     %% TODO: optimize later...
-    Fun = fun(#mqtt_retained{topic = Name, msg = Msg}, Acc) ->
+    Fun = fun(#retained{topic = Name, msg = Msg}, Acc) ->
             case emqx_topic:match(Name, Filter) of
                 true -> [Msg|Acc];
                 false -> Acc
             end
           end,
-    mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], mqtt_retained]).
+    mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], retained]).
 
 -spec(expire_messages(pos_integer()) -> any()).
 expire_messages(Time) when is_integer(Time) ->
     mnesia:transaction(
         fun() ->
             Match = ets:fun2ms(
-                        fun(#mqtt_retained{topic = Topic, ts = Ts})
+                        fun(#retained{topic = Topic, ts = Ts})
                             when Time > Ts -> Topic
                         end),
             Topics = mnesia:select(mqtt_retained, Match, write),
