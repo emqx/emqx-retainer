@@ -1,6 +1,6 @@
 PROJECT = emq_retainer
 PROJECT_DESCRIPTION = EMQ Retainer
-PROJECT_VERSION = 2.3.5
+PROJECT_VERSION = 2.3.6
 
 DEPS = clique
 
