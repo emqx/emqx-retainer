@@ -65,21 +65,23 @@ sort_retained(Msgs) ->
                        Ts1 =< Ts2
                end, Msgs).
 
-on_message_publish(Msg = #message{retain = false}, _Env) ->
-    {ok, Msg};
-
 %% RETAIN flag set to 1 and payload containing zero bytes
-on_message_publish(Msg = #message{retain = true, topic = Topic, payload = <<>>}, _Env) ->
+on_message_publish(Msg = #message{flags = #{retain := true},
+                                  topic = Topic, payload = <<>>}, _Env) ->
     mnesia:dirty_delete(retained, Topic),
     {ok, Msg};
 
-on_message_publish(Msg = #message{retain = true, headers = Headers}, Env) ->
+on_message_publish(Msg = #message{flags = #{retain := true},
+                                  headers = Headers}, Env) ->
     case lists:member(retained, Headers) of
         true  -> {ok, Msg};
-        false -> Msg1 = Msg#message{headers = lists:usort([retained|Headers)},
+        false -> Msg1 = Msg#message{headers = lists:usort([retained|Headers])},
                  store_retained(Msg1, Env),
                  {ok, Msg1}
-    end.
+    end;
+
+on_message_publish(Msg, _Env) ->
+    {ok, Msg}.
 
 store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
@@ -206,12 +208,12 @@ expire_messages(Time) when is_integer(Time) ->
                         fun(#retained{topic = Topic, ts = Ts})
                             when Time > Ts -> Topic
                         end),
-            Topics = mnesia:select(mqtt_retained, Match, write),
+            Topics = mnesia:select(retained, Match, write),
             lists:foreach(fun(<<"$SYS/", _/binary>>) -> ok; %% ignore $SYS/# messages
-                             (Topic) -> mnesia:delete({mqtt_retained, Topic})
+                             (Topic) -> mnesia:delete({retained, Topic})
                            end, Topics)
         end).
 
 -spec(retained_count() -> non_neg_integer()).
-retained_count() -> mnesia:table_info(mqtt_retained, size).
+retained_count() -> mnesia:table_info(retained, size).
 

@@ -18,32 +18,31 @@
 
 -include("emqx_retainer.hrl").
 
--include_lib("emqx/include/emqx_cli.hrl").
-
 -export([load/0, cmd/1, unload/0]).
 
 load() -> emqx_ctl:register_cmd(retainer, {?MODULE, cmd}, []).
 
 cmd(["info"]) ->
-    ?PRINT("retained/total: ~w~n", [mnesia:table_info(mqtt_retained, size)]);
+    emqx_cli:print("retained/total: ~w~n", [mnesia:table_info(retained, size)]);
 
 cmd(["topics"]) ->
-    case mnesia:dirty_all_keys(mqtt_retained) of
+    case mnesia:dirty_all_keys(retained) of
         []     -> ignore;
-        Topics -> lists:foreach(fun(Topic) -> ?PRINT("~s~n", [Topic]) end, Topics)
+        Topics -> lists:foreach(fun(Topic) -> emqx_cli:print("~s~n", [Topic]) end, Topics)
     end;
 
 cmd(["clean"]) ->
-    Size = mnesia:table_info(mqtt_retained, size),
-    case mnesia:clear_table(mqtt_retained) of
-        {atomic, ok} -> ?PRINT("Cleaned ~p retained messages~n", [Size]);
-        {aborted, R} -> ?PRINT("Aborted ~p~n", [R])
+    Size = mnesia:table_info(retained, size),
+    case mnesia:clear_table(retained) of
+        {atomic, ok} -> emqx_cli:print("Cleaned ~p retained messages~n", [Size]);
+        {aborted, R} -> emqx_cli:print("Aborted ~p~n", [R])
     end;
 
 cmd(_) ->
-    ?USAGE([{"retainer info",   "Show the count of retained messages"},
-            {"retainer topics", "Show all topics of retained messages"},
-            {"retainer clean",  "Clean all retained messages"}]).
+    emqx_cli:usage([{"retainer info",   "Show the count of retained messages"},
+                    {"retainer topics", "Show all topics of retained messages"},
+                    {"retainer clean",  "Clean all retained messages"}]).
 
-unload() -> emqx_ctl:unregister_cmd(retainer).
+unload() ->
+    emqx_ctl:unregister_cmd(retainer).
 
