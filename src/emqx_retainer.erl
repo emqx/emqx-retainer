@@ -79,9 +79,9 @@ on_message_publish(Msg = #mqtt_message{retain = true, topic = Topic, payload = <
 on_message_publish(Msg = #mqtt_message{retain = true, headers = Headers}, Env) ->
     case lists:member(retained, Headers) of
         true  -> {ok, Msg};
-        false -> Msg1 = Msg#mqtt_message{headers = lists:umerge([retained], Headers)},
-                 store_retained(Msg1, Env),
-                 {ok, Msg1}
+        false -> 
+            store_retained(Msg#mqtt_message{headers = lists:umerge([retained], Headers)}, Env),
+            {ok, Msg}
     end.
 
 store_retained(Msg = #mqtt_message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
