@@ -1,18 +1,18 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-%%--------------------------------------------------------------------
+%%%===================================================================
+%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
+%%%
+%%% Licensed under the Apache License, Version 2.0 (the "License");
+%%% you may not use this file except in compliance with the License.
+%%% You may obtain a copy of the License at
+%%%
+%%%     http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%% Unless required by applicable law or agreed to in writing, software
+%%% distributed under the License is distributed on an "AS IS" BASIS,
+%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%% See the License for the specific language governing permissions and
+%%% limitations under the License.
+%%%===================================================================
 
 -module(emqx_retainer).
 
@@ -37,7 +37,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {stats_fun, expiry_interval, stats_timer, expire_timer}).
+-record(state, {stats_fun, stats_timer, expiry_interval, expiry_timer}).
+
+-define(TAB, emqx_retained).
 
 %%--------------------------------------------------------------------
 %% Load/Unload
@@ -68,7 +70,7 @@ sort_retained(Msgs) ->
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #message{flags = #{retain := true},
                                   topic = Topic, payload = <<>>}, _Env) ->
-    mnesia:dirty_delete(retained, Topic),
+    mnesia:dirty_delete(?TAB, Topic),
     {ok, Msg};
 
 on_message_publish(Msg = #message{flags = #{retain := true},
@@ -86,7 +88,7 @@ on_message_publish(Msg, _Env) ->
 store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(#retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}),
+            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}, sticky_write),
             emqx_metrics:set('messages/retained', retained_count());
         {true, _} ->
             lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
@@ -126,17 +128,18 @@ init([Env]) ->
                  disc      -> disc_copies;
                  disc_only -> disc_only_copies
              end,
-    ok = ekka_mnesia:create_table(retained, [
+    ok = ekka_mnesia:create_table(?TAB, [
                 {type, set},
                 {Copies, [node()]},
                 {record_name, retained},
                 {attributes, record_info(fields, retained)},
                 {storage_properties, [{ets, [compressed]},
                                       {dets, [{auto_save, 1000}]}]}]),
-    ok = ekka_mnesia:copy_table(retained),
-    case mnesia:table_info(retained, storage_type) of
+    ok = ekka_mnesia:copy_table(?TAB),
+    case mnesia:table_info(?TAB, storage_type) of
         Copies -> ok;
-        _      -> {atomic, ok} = mnesia:change_table_copy_type(retained, node(), Copies)
+        _      ->
+            {atomic, ok} = mnesia:change_table_copy_type(?TAB, node(), Copies)
     end,
     StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
@@ -149,7 +152,7 @@ start_expire_timer(undefined, State) ->
     State;
 start_expire_timer(Ms, State) ->
     {ok, Timer} = timer:send_interval(Ms, expire),
-    State#state{expiry_interval = Ms, expire_timer = Timer}.
+    State#state{expiry_interval = Ms, expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
     emqx_log:error("[Retainer] Uexpected request: ~p", [Req]),
@@ -175,7 +178,8 @@ handle_info(Info, State) ->
     emqx_log:error("[Retainer] Uexpected info: ~p", [Info]),
     {noreply, State}.
 
-terminate(_Reason, _State = #state{stats_timer = TRef1, expire_timer = TRef2}) ->
+terminate(_Reason, _State = #state{stats_timer  = TRef1,
+                                   expiry_timer = TRef2}) ->
     timer:cancel(TRef1), timer:cancel(TRef2).
 
 code_change(_OldVsn, State, _Extra) ->
@@ -198,7 +202,7 @@ match_messages(Filter) ->
                 false -> Acc
             end
           end,
-    mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], retained]).
+    mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], ?TAB]).
 
 -spec(expire_messages(pos_integer()) -> any()).
 expire_messages(Time) when is_integer(Time) ->
@@ -208,12 +212,12 @@ expire_messages(Time) when is_integer(Time) ->
                         fun(#retained{topic = Topic, ts = Ts})
                             when Time > Ts -> Topic
                         end),
-            Topics = mnesia:select(retained, Match, write),
+            Topics = mnesia:select(?TAB, Match, write),
             lists:foreach(fun(<<"$SYS/", _/binary>>) -> ok; %% ignore $SYS/# messages
-                             (Topic) -> mnesia:delete({retained, Topic})
+                             (Topic) -> mnesia:delete({?TAB, Topic})
                            end, Topics)
         end).
 
 -spec(retained_count() -> non_neg_integer()).
-retained_count() -> mnesia:table_info(retained, size).
+retained_count() -> mnesia:table_info(?TAB, size).
 
