@@ -75,9 +75,9 @@ on_message_publish(Msg = #message{flags = #{retain := true},
 
 on_message_publish(Msg = #message{flags = #{retain := true},
                                   headers = Headers}, Env) ->
-    case lists:member(retained, Headers) of
+    case maps:get(retained, Headers, false) of
         true  -> {ok, Msg};
-        false -> Msg1 = Msg#message{headers = lists:usort([retained|Headers])},
+        false -> Msg1 = Msg#message{headers = maps:put(retained, true, Headers)},
                  store_retained(Msg1, Env),
                  {ok, Msg1}
     end;
