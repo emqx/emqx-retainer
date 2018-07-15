@@ -1,18 +1,16 @@
-%%%===================================================================
-%%% Copyright (c) 2013-2018 EMQ Inc. All rights reserved.
-%%%
-%%% Licensed under the Apache License, Version 2.0 (the "License");
-%%% you may not use this file except in compliance with the License.
-%%% You may obtain a copy of the License at
-%%%
-%%%     http://www.apache.org/licenses/LICENSE-2.0
-%%%
-%%% Unless required by applicable law or agreed to in writing, software
-%%% distributed under the License is distributed on an "AS IS" BASIS,
-%%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%%% See the License for the specific language governing permissions and
-%%% limitations under the License.
-%%%===================================================================
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 -module(emqx_retainer).
 
@@ -24,18 +22,16 @@
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
-%% gen_mod Callbacks
 -export([load/1, unload/0]).
 
-%% Hook Callbacks
+%% Hooks
 -export([on_session_subscribed/4, on_message_publish/2]).
 
-%% API Function Exports
 -export([start_link/1]).
 
 %% gen_server Function Exports
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
 
 -record(state, {stats_fun, stats_timer, expiry_interval, expiry_timer}).
 
@@ -91,10 +87,10 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}, sticky_write),
             emqx_metrics:set('messages/retained', retained_count());
         {true, _} ->
-            lager:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
+            emqx_logger:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
-            lager:error("Cannot retain message(topic=~s, payload_size=~p) "
-                        "for payload is too big!", [Topic, byte_size(Payload)])
+            emqx_logger:error("Cannot retain message(topic=~s, payload_size=~p) "
+                              "for payload is too big!", [Topic, iolist_size(Payload)])
     end.
 
 is_table_full(Env) ->
@@ -138,7 +134,7 @@ init([Env]) ->
     ok = ekka_mnesia:copy_table(?TAB),
     case mnesia:table_info(?TAB, storage_type) of
         Copies -> ok;
-        _      ->
+        _ ->
             {atomic, ok} = mnesia:change_table_copy_type(?TAB, node(), Copies)
     end,
     StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
@@ -155,11 +151,11 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_interval = Ms, expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    emqx_log:error("[Retainer] Uexpected request: ~p", [Req]),
-    {reply, ignore, State}.
+    emqx_logger:error("[Retainer] unexpected call: ~p", [Req]),
+    {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    emqx_log:error("[Retainer] Uexpected msg: ~p", [Msg]),
+    emqx_logger:error("[Retainer] unexpected cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
@@ -175,11 +171,10 @@ handle_info(expire, State = #state{expiry_interval = Interval}) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    emqx_log:error("[Retainer] Uexpected info: ~p", [Info]),
+    emqx_logger:error("[Retainer] unexpected info: ~p", [Info]),
     {noreply, State}.
 
-terminate(_Reason, _State = #state{stats_timer  = TRef1,
-                                   expiry_timer = TRef2}) ->
+terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) ->
     timer:cancel(TRef1), timer:cancel(TRef2).
 
 code_change(_OldVsn, State, _Extra) ->

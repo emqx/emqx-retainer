@@ -1,4 +1,3 @@
-
 EMQ X Retainer
 ==============
 
@@ -55,5 +54,5 @@ Apache License Version 2.0
 Author
 ------
 
-EMQ X-Men Team
+EMQ X Team
 

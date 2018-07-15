@@ -7,16 +7,14 @@ dep_emqx = git https://github.com/emqtt/emqttd emqx30
 dep_cuttlefish = git https://github.com/emqtt/cuttlefish
 
 TEST_DEPS = emqx_ct_helpers
-dep_emqx_ct_helpers = git git@github.com:emqx/emqx-ct-helpers
+dep_emqx_ct_helpers = git https://github.com/emqx/emqx-ct-helpers
 
 NO_AUTOPATCH = cuttlefish
 
 ERLC_OPTS += +debug_info
 ERLC_OPTS += +warnings_as_errors +warn_export_all +warn_unused_import
-ERLC_OPTS += +'{parse_transform, lager_transform}'
 
 TEST_ERLC_OPTS += +debug_info
-TEST_ERLC_OPTS += +'{parse_transform, lager_transform}'
 
 COVER = true
 
