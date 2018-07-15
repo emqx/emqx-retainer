@@ -69,13 +69,11 @@ on_message_publish(Msg = #message{flags = #{retain := true},
     mnesia:dirty_delete(?TAB, Topic),
     {ok, Msg};
 
-on_message_publish(Msg = #message{flags = #{retain := true},
-                                  headers = Headers}, Env) ->
+on_message_publish(Msg = #message{flags = #{retain := true}, headers = Headers}, Env) ->
     case maps:get(retained, Headers, false) of
         true  -> {ok, Msg};
-        false -> Msg1 = Msg#message{headers = maps:put(retained, true, Headers)},
-                 store_retained(Msg1, Env),
-                 {ok, Msg1}
+        false -> store_retained(Msg#message{headers = maps:put(retained, true, Headers)}, Env),
+                 {ok, Msg}
     end;
 
 on_message_publish(Msg, _Env) ->
