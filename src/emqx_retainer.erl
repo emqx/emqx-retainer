@@ -184,7 +184,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec(read_messages(binary()) -> [message()]).
 read_messages(Topic) ->
-    [Msg || #retained{msg = Msg} <- mnesia:dirty_read(retained, Topic)].
+    [Msg || #retained{msg = Msg} <- mnesia:dirty_read(?TAB, Topic)].
 
 -spec(match_messages(binary()) -> [message()]).
 match_messages(Filter) ->
