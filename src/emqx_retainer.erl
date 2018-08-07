@@ -82,7 +82,7 @@ on_message_publish(Msg, _Env) ->
 store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}, sticky_write),
+            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}),
             emqx_metrics:set('messages/retained', retained_count());
         {true, _} ->
             emqx_logger:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
