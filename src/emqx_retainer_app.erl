@@ -30,3 +30,4 @@ stop(_State) ->
     emqx_retainer_cli:unload(),
     emqx_retainer:unload(),
     emqx_retainer_cfg:unregister().
+

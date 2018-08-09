@@ -17,82 +17,75 @@
 -behaviour(gen_server).
 
 -include("emqx_retainer.hrl").
-
 -include_lib("emqx/include/emqx.hrl").
-
 -include_lib("stdlib/include/ms_transform.hrl").
 
--export([load/1, unload/0]).
-
-%% Hooks
--export([on_session_subscribed/4, on_message_publish/2]).
-
 -export([start_link/1]).
+-export([load/1, unload/0]).
+-export([on_session_subscribed/3, on_message_publish/2]).
 
-%% gen_server Function Exports
+%% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
 -record(state, {stats_fun, stats_timer, expiry_interval, expiry_timer}).
 
--define(TAB, emqx_retained).
+-define(TAB, ?MODULE).
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Load/Unload
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 load(Env) ->
-    emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/4, [Env]),
+    emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/4, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
-on_session_subscribed(_ClientId, _Username, {Topic, _Opts}, _Env) ->
-    SessPid = self(),
+on_session_subscribed(_ClientId, Topic, _SubOpts) ->
     Msgs = case emqx_topic:wildcard(Topic) of
                false -> read_messages(Topic);
                true  -> match_messages(Topic)
            end,
-    lists:foreach(fun(Msg) -> SessPid ! {dispatch, Topic, Msg} end, sort_retained(Msgs)).
-
-sort_retained([]) ->
-    [];
-sort_retained([Msg]) ->
-    [Msg];
-sort_retained(Msgs) ->
-    lists:sort(fun(#message{timestamp = Ts1},
-                   #message{timestamp = Ts2}) ->
-                       Ts1 =< Ts2
-               end, Msgs).
+    self() ! {dispatch, Topic, sort_retained(Msgs)}.
 
 %% RETAIN flag set to 1 and payload containing zero bytes
-on_message_publish(Msg = #message{flags = #{retain := true},
-                                  topic = Topic, payload = <<>>}, _Env) ->
+on_message_publish(Msg = #message{flags   = #{retain := true},
+                                  topic   = Topic,
+                                  payload = <<>>}, _Env) ->
     mnesia:dirty_delete(?TAB, Topic),
     {ok, Msg};
 
-on_message_publish(Msg = #message{flags = #{retain := true}, headers = Headers}, Env) ->
-    case maps:get(retained, Headers, false) of
+on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
+    case emqx_message:get_header(retained, Msg, false) of
         true  -> {ok, Msg};
-        false -> store_retained(Msg#message{headers = maps:put(retained, true, Headers)}, Env),
-                 {ok, Msg}
+        false ->
+            Msg1 = emqx_message:set_header(retained, true, Msg),
+            store_retained(Msg1, Env),
+            {ok, Msg1}
     end;
-
 on_message_publish(Msg, _Env) ->
     {ok, Msg}.
+
+sort_retained([])    -> [];
+sort_retained([Msg]) -> [Msg];
+sort_retained(Msgs)  ->
+    lists:sort(fun(#message{timestamp = Ts1}, #message{timestamp = Ts2}) ->
+                   Ts1 =< Ts2
+               end, Msgs).
 
 store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)}, sticky_write),
-            emqx_metrics:set('messages/retained', retained_count());
+            emqx_metrics:set('messages/retained', retained_count()),
+            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)});
         {true, _} ->
-            emqx_logger:error("Cannot retain message(topic=~s) for table is full!", [Topic]);
+            emqx_logger:error("[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
-            emqx_logger:error("Cannot retain message(topic=~s, payload_size=~p) "
+            emqx_logger:error("[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
                               "for payload is too big!", [Topic, iolist_size(Payload)])
     end.
 
 is_table_full(Env) ->
-    Limit = proplists:get_value(max_message_num, Env, 0),
+    Limit = proplists:get_value(max_retained_messages, Env, 0),
     Limit > 0 andalso (retained_count() > Limit).
 
 is_too_big(Size, Env) ->
@@ -100,21 +93,21 @@ is_too_big(Size, Env) ->
     Limit > 0 andalso (Size > Limit).
 
 unload() ->
-    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4),
-    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2).
+    emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4).
 
-%%--------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 %% API
-%%--------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
 
 %% @doc Start the retainer
--spec(start_link(Env :: list()) -> {ok, pid()} | ignore | {error, any()}).
+-spec(start_link(Env :: list()) -> {ok, pid()} | ignore | {error, term()}).
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
 
-%%--------------------------------------------------------------------
-%% gen_server Callbacks
-%%--------------------------------------------------------------------
+%%-----------------------------------------------------------------------------
+%% gen_server callbacks
+%%-----------------------------------------------------------------------------
 
 init([Env]) ->
     Copies = case proplists:get_value(storage_type, Env, disc) of
@@ -132,11 +125,11 @@ init([Env]) ->
     ok = ekka_mnesia:copy_table(?TAB),
     case mnesia:table_info(?TAB, storage_type) of
         Copies -> ok;
-        _ ->
+        _Other ->
             {atomic, ok} = mnesia:change_table_copy_type(?TAB, node(), Copies)
     end,
     StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
-    {ok, StatsTimer}  = timer:send_interval(timer:seconds(1), stats),
+    {ok, StatsTimer} = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
     {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
 
@@ -178,9 +171,9 @@ terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) -
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% Internal functions
-%%--------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 -spec(read_messages(binary()) -> [message()]).
 read_messages(Topic) ->
