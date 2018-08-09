@@ -1,3 +1,4 @@
+
 EMQ X Retainer
 ==============
 
@@ -23,7 +24,7 @@ retainer.storage_type = ram
 ## Maximum number of retained messages allowed.
 ##
 ## Value: Number >= 0
-retainer.max_message_num = 1000000
+retainer.max_retained_messages = 1000000
 
 ## Maximum payload size of a retained message.
 ##
