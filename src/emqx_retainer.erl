@@ -35,7 +35,7 @@
 %%------------------------------------------------------------------------------
 
 load(Env) ->
-    emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/4, []),
+    emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/3, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
 on_session_subscribed(_ClientId, Topic, _SubOpts) ->
@@ -92,7 +92,7 @@ is_too_big(Size, Env) ->
 
 unload() ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
-    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/4).
+    emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/3).
 
 %%-----------------------------------------------------------------------------
 %% API
