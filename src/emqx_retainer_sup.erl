@@ -20,8 +20,6 @@
 
 -export([init/1]).
 
--define(M, emqx_retainer).
-
 start_link(Env) ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, [Env]).
 

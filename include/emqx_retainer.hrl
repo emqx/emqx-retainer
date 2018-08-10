@@ -12,5 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
+-define(APP, emqx_retainer).
+-define(TAB, ?APP).
 -record(retained, {topic, msg, ts}).
 
