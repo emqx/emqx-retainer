@@ -22,17 +22,17 @@ load() ->
     emqx_ctl:register_command(retainer, {?MODULE, cmd}, []).
 
 cmd(["info"]) ->
-    emqx_cli:print("retained/total: ~w~n", [mnesia:table_info(retained, size)]);
+    emqx_cli:print("retained/total: ~w~n", [mnesia:table_info(emqx_retained, size)]);
 
 cmd(["topics"]) ->
-    case mnesia:dirty_all_keys(retained) of
+    case mnesia:dirty_all_keys(emqx_retained) of
         []     -> ignore;
         Topics -> lists:foreach(fun(Topic) -> emqx_cli:print("~s~n", [Topic]) end, Topics)
     end;
 
 cmd(["clean"]) ->
-    Size = mnesia:table_info(retained, size),
-    case mnesia:clear_table(retained) of
+    Size = mnesia:table_info(emqx_retained, size),
+    case mnesia:clear_table(emqx_retained) of
         {atomic, ok} -> emqx_cli:print("Cleaned ~p retained messages~n", [Size]);
         {aborted, R} -> emqx_cli:print("Aborted ~p~n", [R])
     end;
