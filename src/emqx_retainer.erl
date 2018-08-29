@@ -99,7 +99,7 @@ unload() ->
 %%-----------------------------------------------------------------------------
 
 %% @doc Start the retainer
--spec(start_link(Env :: list()) -> {ok, pid()} | ignore | {error, term()}).
+-spec(start_link(Env :: list()) -> emqx_types:startlink_ret()).
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
 
@@ -173,11 +173,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%------------------------------------------------------------------------------
 
--spec(read_messages(binary()) -> [message()]).
+-spec(read_messages(binary()) -> [emqx_types:message()]).
 read_messages(Topic) ->
     [Msg || #retained{msg = Msg} <- mnesia:dirty_read(?TAB, Topic)].
 
--spec(match_messages(binary()) -> [message()]).
+-spec(match_messages(binary()) -> [emqx_types:message()]).
 match_messages(Filter) ->
     %% TODO: optimize later...
     Fun = fun(#retained{topic = Name, msg = Msg}, Acc) ->
