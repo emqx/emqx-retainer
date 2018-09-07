@@ -38,12 +38,17 @@ load(Env) ->
     emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/3, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
-on_session_subscribed(_ClientId, Topic, _SubOpts) ->
-    Msgs = case emqx_topic:wildcard(Topic) of
-               false -> read_messages(Topic);
-               true  -> match_messages(Topic)
-           end,
-    self() ! {dispatch, Topic, sort_retained(Msgs)}.
+on_session_subscribed(_ClientId, Topic, #{rh := Rh, first := First}) ->
+    if 
+        Rh =:= 0 orelse (Rh =:= 1 andalso First =:= true) ->
+            Msgs = case emqx_topic:wildcard(Topic) of
+                    false -> read_messages(Topic);
+                    true  -> match_messages(Topic)
+                end,
+            self() ! {dispatch, Topic, sort_retained(Msgs)};
+        true ->
+            ok
+    end.
 
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #message{flags   = #{retain := true},
@@ -53,13 +58,8 @@ on_message_publish(Msg = #message{flags   = #{retain := true},
     {ok, Msg};
 
 on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
-    case emqx_message:get_header(retained, Msg, false) of
-        true  -> {ok, Msg};
-        false ->
-            Msg1 = emqx_message:set_header(retained, true, Msg),
-            store_retained(Msg1, Env),
-            {ok, Msg1}
-    end;
+    store_retained(Msg, Env),
+    {ok, Msg};
 on_message_publish(Msg, _Env) ->
     {ok, Msg}.
 
