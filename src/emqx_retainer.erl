@@ -58,7 +58,7 @@ on_message_publish(Msg = #message{flags   = #{retain := true},
     {ok, Msg};
 
 on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
-    Msg1 = emqx_message:set_header(retained, Msg, true),
+    Msg1 = emqx_message:set_header(retained, true, Msg),
     store_retained(Msg1, Env),
     {ok, Msg1};
 on_message_publish(Msg, _Env) ->
