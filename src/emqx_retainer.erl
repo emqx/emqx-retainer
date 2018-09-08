@@ -58,10 +58,11 @@ on_message_publish(Msg = #message{flags   = #{retain := true},
     {ok, Msg};
 
 on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
-    store_retained(Msg, Env),
-    {ok, Msg};
+    Msg1 = emqx_message:set_header(retained, Msg, true),
+    store_retained(Msg1, Env),
+    {ok, Msg1};
 on_message_publish(Msg, _Env) ->
-    {ok, Msg}.
+    {ok, emqx_message:set_header(retained, Msg, false)}.
 
 sort_retained([])    -> [];
 sort_retained([Msg]) -> [Msg];
