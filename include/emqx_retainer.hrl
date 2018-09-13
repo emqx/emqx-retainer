@@ -14,5 +14,5 @@
 
 -define(APP, emqx_retainer).
 -define(TAB, ?APP).
--record(retained, {topic, msg, ts}).
+-record(retained, {topic, msg, expiry_time}).
 

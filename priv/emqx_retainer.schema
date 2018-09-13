@@ -29,3 +29,7 @@
   {datatype, [integer, {duration, ms}]}
 ]}.
 
+{mapping, "retainer.expiry_timer_interval", "emqx_retainer.expiry_timer_interval", [
+  {default, 0},
+  {datatype, [integer, {duration, ms}]}
+]}.
