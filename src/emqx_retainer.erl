@@ -77,8 +77,7 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             emqx_metrics:set('messages/retained', retained_count()),
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
-                #message{headers = #{'Message-Expiry-Interval' := 0}} -> 0;
-                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} -> emqx_time:now_ms(Ts) + Interval * 1000;
+                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 -> emqx_time:now_ms(Ts) + Interval * 1000;
                 #message{timestamp = Ts} -> 
                     case proplists:get_value(expiry_interval, Env, 0) of
                         0 -> 0;
