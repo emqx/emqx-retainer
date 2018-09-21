@@ -139,7 +139,7 @@ init([Env]) ->
     StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
     {ok, StatsTimer} = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
-    {ok, start_expire_timer(proplists:get_value(expiry_timer_interval, Env, 0), State)}.
+    {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
 
 start_expire_timer(0, State) ->
     State;
