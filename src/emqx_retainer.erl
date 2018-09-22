@@ -45,7 +45,12 @@ on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, first := Fir
                     false -> read_messages(Topic);
                     true  -> match_messages(Topic)
                 end,
-            self() ! {dispatch, Topic, sort_retained(Msgs)};
+            if 
+                Msgs =:= [] ->
+                    ok;
+                true ->
+                    self() ! {dispatch, Topic, sort_retained(Msgs)}
+            end;
         true ->
             ok
     end.
@@ -77,7 +82,8 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             emqx_metrics:set('messages/retained', retained_count()),
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
-                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 -> emqx_time:now_ms(Ts) + Interval * 1000;
+                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 -> 
+                    emqx_time:now_ms(Ts) + Interval * 1000;
                 #message{timestamp = Ts} -> 
                     case proplists:get_value(expiry_interval, Env, 0) of
                         0 -> 0;
