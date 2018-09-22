@@ -42,15 +42,10 @@ on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, first := Fir
     if 
         Rh =:= 0 orelse (Rh =:= 1 andalso First =:= true) ->
             Msgs = case emqx_topic:wildcard(Topic) of
-                    false -> read_messages(Topic);
-                    true  -> match_messages(Topic)
-                end,
-            if 
-                Msgs =:= [] ->
-                    ok;
-                true ->
-                    self() ! {dispatch, Topic, sort_retained(Msgs)}
-            end;
+                       false -> read_messages(Topic);
+                       true  -> match_messages(Topic)
+                   end,
+            dispatch_retained(Topic, Msgs);
         true ->
             ok
     end.
@@ -184,6 +179,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%------------------------------------------------------------------------------
 %% Internal functions
 %%------------------------------------------------------------------------------
+
+dispatch_retained(_Topic, []) ->
+    ok;
+dispatch_retained(Topic, Msgs) ->
+    self() ! {dispatch, Topic, sort_retained(Msgs)}.
 
 -spec(read_messages(binary()) -> [emqx_types:message()]).
 read_messages(Topic) ->
