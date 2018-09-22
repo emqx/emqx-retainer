@@ -31,7 +31,6 @@
 -define(WILD_TOPICS, [<<"TopicA/+">>, <<"+/C">>, <<"#">>, <<"/#">>, <<"/+">>,
                       <<"+/+">>, <<"TopicA/#">>]).
 
-
 -define(MQTT_SSL_TWOWAY, [{cacertfile, "certs/cacert.pem"},
                           {verify, verify_peer},
                           {fail_if_no_peer_cert, true}]).
@@ -66,11 +65,6 @@
                          "DHE-DSS-AES128-SHA","ECDH-ECDSA-AES128-SHA",
                          "ECDH-RSA-AES128-SHA","AES128-SHA"]}]).
 
-publish_retained_message(ClientId, Qos, Payload) ->
-    emqx_client:publish(ClientId, nth(2, ?TOPICS), Payload, [{qos, Qos}, {retain, true}]),
-    emqx_client:publish(ClientId, nth(3, ?TOPICS), Payload, [{qos, Qos}, {retain, true}]),
-    emqx_client:publish(ClientId, nth(4, ?TOPICS), Payload, [{qos, Qos}, {retain, true}]).
-
 receive_messages(Count) ->
     receive_messages(Count, []).
 
@@ -84,61 +78,120 @@ receive_messages(Count, Msgs) ->
         Other ->
             ct:log("Other Msg: ~p~n",[Other]),
             receive_messages(Count, Msgs)
-    after 10 ->
+    after 3 ->
             Msgs
     end.
 
-all() -> [retained_message_test].
+all() -> [
+            test_message_expiry, 
+            test_expiry_timer,
+            test_subscribe_topics
+         ].
 
-retained_message_test(_Config) ->
-    ct:print("Retained message test starting"),
-
-    %% Retained messages
+test_message_expiry(_) ->
     {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
-    publish_retained_message(C1, 0, <<"Qos0">>),
+    emqx_client:publish(C1, <<"qos/0">>, #{'Message-Expiry-Interval' => 2}, <<"QoS0">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C1, <<"qos/1">>, #{'Message-Expiry-Interval' => 2}, <<"QoS1">>, [{qos, 1}, {retain, true}]),
+    emqx_client:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
     ok = emqx_client:disconnect(C1),
-    timer:sleep(20),
+
+    %% Don't expire
+    timer:sleep(10),
     {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
-    {ok, undefined, [0]} = emqx_client:subscribe(C2, nth(6, ?WILD_TOPICS), 0),
+    {ok, #{}, [0]} = emqx_client:subscribe(C2, <<"qos/+">>, 0),
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqx_client:disconnect(C2),
 
+    %% Expire
+    timer:sleep(3000),
     {ok, C3, _} = emqx_client:start_link([{clean_start, true}]),
-    publish_retained_message(C3, 1, <<"Qos1">>),
+    {ok, #{}, [0]} = emqx_client:subscribe(C3, <<"qos/+">>, 0),
+    ?assertEqual(0, length(receive_messages(1))),
     ok = emqx_client:disconnect(C3),
-    timer:sleep(20),
+
     {ok, C4, _} = emqx_client:start_link([{clean_start, true}]),
-    {ok, undefined, [1]} = emqx_client:subscribe(C4, nth(6, ?WILD_TOPICS), 1),
-    ?assertEqual(3, length(receive_messages(3))),
+    emqx_client:publish(C4, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C4, <<"test/B">>, #{'Message-Expiry-Interval' => 2}, <<"expire">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C4, <<"test/C">>, #{'Message-Expiry-Interval' => 5}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    % emqx_client:publish(C4, <<"test/D">>, <<"don't expire if retainer.expiry_interval equals to 0">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C4, <<"$SYS/E">>, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    ok = emqx_client:disconnect(C4),
+
+    timer:sleep(3000),
+    {ok, C5, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"test/C">>, 0),
+    ?assertEqual(1, length(receive_messages(1))),
+    {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"test/+">>, 0),
+    {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"$SYS/E">>, 0),
+    ?assertEqual(3, length(receive_messages(4))),
+    ok = emqx_client:disconnect(C5).
+
+%% expired message will be deleted by check timer
+test_expiry_timer(_) ->
+    {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
+    emqx_client:publish(C1, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C1, <<"test/B">>, #{'Message-Expiry-Interval' => 1}, <<"expire">>, [{qos, 0}, {retain, true}]),
+    emqx_client:publish(C1, <<"test/C">>, <<"expire">>, [{qos, 0}, {retain, true}]),
+    ok = emqx_client:disconnect(C1),
+
+    timer:sleep(4000),
+    {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, #{}, [0]} = emqx_client:subscribe(C2, <<"test/+">>, 0),
+    ok = emqx_client:disconnect(C2).
+
+test_subscribe_topics(_) ->
+    {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
+    lists:foreach(fun(N) -> 
+                    emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]) 
+                  end, [1,2,3,4,5]),
+    ok = emqx_client:disconnect(C1),
+    timer:sleep(10),
+    {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, #{}, [0]} = emqx_client:subscribe(C2, nth(1, ?WILD_TOPICS), 0),
+    ?assertEqual(2, length(receive_messages(2))),
+    ok = emqx_client:disconnect(C2),
+
+    {ok, C3, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, #{}, [0]} = emqx_client:subscribe(C3, nth(2, ?WILD_TOPICS), 0),
+    ?assertEqual(2, length(receive_messages(2))),
+    ok = emqx_client:disconnect(C3),
+
+    {ok, C4, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, #{}, [0]} = emqx_client:subscribe(C4, nth(5, ?WILD_TOPICS), 0),
+    ?assertEqual(1, length(receive_messages(1))),
     ok = emqx_client:disconnect(C4),
 
     {ok, C5, _} = emqx_client:start_link([{clean_start, true}]),
-    publish_retained_message(C5, 2, <<"Qos2">>),
-    ok = emqx_client:disconnect(C5),
-    timer:sleep(20),
-    {ok, C6, _} = emqx_client:start_link([{clean_start, true}]),
-    {ok, undefined, [2]} = emqx_client:subscribe(C6, nth(6, ?WILD_TOPICS), 2),
+    {ok, #{}, [0]} = emqx_client:subscribe(C5, nth(6, ?WILD_TOPICS), 0),
     ?assertEqual(3, length(receive_messages(3))),
-    ok = emqx_client:disconnect(C6),
-
-    {ok, C7, _} = emqx_client:start_link([{clean_start, true}]),
-    publish_retained_message(C7, 2, <<"">>),
-    ok = emqx_client:disconnect(C7),
-    timer:sleep(20),
-    {ok, C8, _} = emqx_client:start_link([{clean_start, true}]),
-    {ok, undefined, [2]} = emqx_client:subscribe(C8, nth(6, ?WILD_TOPICS), 2),
-    ?assertEqual(0, length(receive_messages(3))),
-    ok = emqx_client:disconnect(C8).
-
-
+    ok = emqx_client:disconnect(C5).
 
 init_per_suite(Config) ->
-    [run_setup_steps(App) || App <- [emqx, emqx_management, emqx_retainer]],
+    [run_setup_steps(App) || App <- [emqx, emqx_management]],
     Config.
 
 end_per_suite(_Config) ->
-    run_teardown_steps().
+    emqx:shutdown().
 
+init_per_testcase(TestCase, Config) ->
+    NewConfig = generate_config(emqx_retainer),
+    lists:foreach(fun set_app_env/1, NewConfig),
+    case TestCase of
+        test_message_expiry ->
+            application:set_env(emqx_retainer, expiry_interval, 0),
+            application:set_env(emqx_retainer, expiry_timer_interval, 0);
+        test_expiry_timer ->
+            application:set_env(emqx_retainer, expiry_interval, 2000),
+            application:set_env(emqx_retainer, expiry_timer_interval, 1000);    % 1000ms
+        test_subscribe_topics ->
+            application:set_env(emqx_retainer, expiry_interval, 0),
+            application:set_env(emqx_retainer, expiry_timer_interval, 0)
+    end,
+    application:ensure_all_started(emqx_retainer),
+    Config.
+
+end_per_testcase(_TestCase, _Config) ->
+    application:stop(emqx_retainer).
 
 run_setup_steps(App) ->
     NewConfig = generate_config(App),
@@ -146,11 +199,7 @@ run_setup_steps(App) ->
     application:ensure_all_started(App),
     ct:log("Applications: ~p", [application:loaded_applications()]).
 
-run_teardown_steps() ->
-    application:stop(emqx_retainer),
-    emqx:shutdown().
-
-generate_config(?APP) ->
+generate_config(emqx) ->
     Schema = cuttlefish_schema:files([local_path(["deps", "emqx", "priv", "emqx.schema"])]),
     Conf = conf_parse:file([local_path(["deps", "emqx", "etc", "emqx.conf"])]),
     cuttlefish_generator:map(Schema, Conf);

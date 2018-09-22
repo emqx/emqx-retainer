@@ -28,7 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {stats_fun, stats_timer, expiry_interval, expiry_timer}).
+-record(state, {stats_fun, stats_timer, expiry_timer}).
 
 %%------------------------------------------------------------------------------
 %% Load/Unload
@@ -42,10 +42,10 @@ on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, first := Fir
     if 
         Rh =:= 0 orelse (Rh =:= 1 andalso First =:= true) ->
             Msgs = case emqx_topic:wildcard(Topic) of
-                    false -> read_messages(Topic);
-                    true  -> match_messages(Topic)
-                end,
-            self() ! {dispatch, Topic, sort_retained(Msgs)};
+                       false -> read_messages(Topic);
+                       true  -> match_messages(Topic)
+                   end,
+            dispatch_retained(Topic, Msgs);
         true ->
             ok
     end.
@@ -75,7 +75,17 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
             emqx_metrics:set('messages/retained', retained_count()),
-            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, ts = emqx_time:now_ms(Ts)});
+            ExpiryTime = case Msg of
+                #message{topic = <<"$SYS/", _/binary>>} -> 0;
+                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 -> 
+                    emqx_time:now_ms(Ts) + Interval * 1000;
+                #message{timestamp = Ts} -> 
+                    case proplists:get_value(expiry_interval, Env, 0) of
+                        0 -> 0;
+                        Interval -> emqx_time:now_ms(Ts) + Interval
+                    end
+            end,
+            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
         {true, _} ->
             emqx_logger:error("[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
@@ -138,7 +148,7 @@ start_expire_timer(undefined, State) ->
     State;
 start_expire_timer(Ms, State) ->
     {ok, Timer} = timer:send_interval(Ms, expire),
-    State#state{expiry_interval = Ms, expiry_timer = Timer}.
+    State#state{expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
     emqx_logger:error("[Retainer] unexpected call: ~p", [Req]),
@@ -152,12 +162,8 @@ handle_info(stats, State = #state{stats_fun = StatsFun}) ->
     StatsFun(retained_count()),
     {noreply, State, hibernate};
 
-handle_info(expire, State = #state{expiry_interval = Never})
-    when Never =:= 0 orelse Never =:= undefined ->
-    {noreply, State, hibernate};
-
-handle_info(expire, State = #state{expiry_interval = Interval}) ->
-    expire_messages(emqx_time:now_ms() - Interval),
+handle_info(expire, State) ->
+    expire_messages(),
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
@@ -174,32 +180,60 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%------------------------------------------------------------------------------
 
+dispatch_retained(_Topic, []) ->
+    ok;
+dispatch_retained(Topic, Msgs) ->
+    self() ! {dispatch, Topic, sort_retained(Msgs)}.
+
 -spec(read_messages(binary()) -> [emqx_types:message()]).
 read_messages(Topic) ->
-    [Msg || #retained{msg = Msg} <- mnesia:dirty_read(?TAB, Topic)].
+    case mnesia:dirty_read(?TAB, Topic) of
+        [#retained{msg = Msg, expiry_time = 0}] ->
+            [Msg];
+        [#retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime}] ->
+            case emqx_time:now_ms() >= ExpiryTime of
+                true ->
+                    mnesia:transaction(fun() -> mnesia:delete({?TAB, Topic}) end),
+                    [];
+                false ->
+                    [Msg]
+            end;
+        [] -> []
+    end.
 
 -spec(match_messages(binary()) -> [emqx_types:message()]).
 match_messages(Filter) ->
     %% TODO: optimize later...
-    Fun = fun(#retained{topic = Name, msg = Msg}, Acc) ->
-            case emqx_topic:match(Name, Filter) of
-                true -> [Msg|Acc];
-                false -> Acc
-            end
-          end,
-    mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], ?TAB]).
+    Fun = fun
+            (#retained{topic = Name, msg = Msg, expiry_time = ExpiryTime}, {Unexpired, Expired}) ->
+                case emqx_topic:match(Name, Filter) of
+                    true ->
+                        case ExpiryTime =/= 0 andalso emqx_time:now_ms() >= ExpiryTime of
+                            true -> {Unexpired, [Msg | Expired]};
+                            false ->
+                                {[Msg | Unexpired], Expired}
+                        end;
+                    false -> {Unexpired, Expired}
+                end
+            end,
+    {Unexpired, Expired} = mnesia:async_dirty(fun mnesia:foldl/3, [Fun, {[], []}, ?TAB]),
+    mnesia:transaction(
+        fun() ->
+            lists:foreach(fun(Msg) -> mnesia:delete({?TAB, Msg#message.topic}) end, Expired)
+        end),
+    Unexpired.
 
--spec(expire_messages(pos_integer()) -> any()).
-expire_messages(Time) when is_integer(Time) ->
+-spec(expire_messages() -> any()).
+expire_messages() ->
+    NowMs = emqx_time:now_ms(),
     mnesia:transaction(
         fun() ->
             Match = ets:fun2ms(
-                        fun(#retained{topic = Topic, ts = Ts})
-                            when Time > Ts -> Topic
+                        fun(#retained{topic = Topic, expiry_time = ExpiryTime})
+                            when ExpiryTime =/= 0 andalso NowMs > ExpiryTime -> Topic
                         end),
             Topics = mnesia:select(?TAB, Match, write),
-            lists:foreach(fun(<<"$SYS/", _/binary>>) -> ok; %% ignore $SYS/# messages
-                             (Topic) -> mnesia:delete({?TAB, Topic})
+            lists:foreach(fun(Topic) -> mnesia:delete({?TAB, Topic})
                            end, Topics)
         end).
 
