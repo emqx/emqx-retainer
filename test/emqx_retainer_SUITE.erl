@@ -89,7 +89,7 @@ all() -> [
          ].
 
 test_message_expiry(_) ->
-    {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C1, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     emqx_client:publish(C1, <<"qos/0">>, #{'Message-Expiry-Interval' => 2}, <<"QoS0">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C1, <<"qos/1">>, #{'Message-Expiry-Interval' => 2}, <<"QoS1">>, [{qos, 1}, {retain, true}]),
     emqx_client:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
@@ -97,19 +97,19 @@ test_message_expiry(_) ->
 
     %% Don't expire
     timer:sleep(10),
-    {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C2, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C2, <<"qos/+">>, 0),
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqx_client:disconnect(C2),
 
     %% Expire
     timer:sleep(3000),
-    {ok, C3, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C3, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C3, <<"qos/+">>, 0),
     ?assertEqual(0, length(receive_messages(1))),
     ok = emqx_client:disconnect(C3),
 
-    {ok, C4, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C4, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     emqx_client:publish(C4, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C4, <<"test/B">>, #{'Message-Expiry-Interval' => 2}, <<"expire">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C4, <<"test/C">>, #{'Message-Expiry-Interval' => 5}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
@@ -118,7 +118,7 @@ test_message_expiry(_) ->
     ok = emqx_client:disconnect(C4),
 
     timer:sleep(3000),
-    {ok, C5, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C5, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"test/C">>, 0),
     ?assertEqual(1, length(receive_messages(1))),
     {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"test/+">>, 0),
@@ -128,40 +128,40 @@ test_message_expiry(_) ->
 
 %% expired message will be deleted by check timer
 test_expiry_timer(_) ->
-    {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C1, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     emqx_client:publish(C1, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C1, <<"test/B">>, #{'Message-Expiry-Interval' => 1}, <<"expire">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C1, <<"test/C">>, <<"expire">>, [{qos, 0}, {retain, true}]),
     ok = emqx_client:disconnect(C1),
 
     timer:sleep(4000),
-    {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C2, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C2, <<"test/+">>, 0),
     ok = emqx_client:disconnect(C2).
 
 test_subscribe_topics(_) ->
-    {ok, C1, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C1, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     lists:foreach(fun(N) -> 
                     emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]) 
                   end, [1,2,3,4,5]),
     ok = emqx_client:disconnect(C1),
     timer:sleep(10),
-    {ok, C2, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C2, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C2, nth(1, ?WILD_TOPICS), 0),
     ?assertEqual(2, length(receive_messages(2))),
     ok = emqx_client:disconnect(C2),
 
-    {ok, C3, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C3, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C3, nth(2, ?WILD_TOPICS), 0),
     ?assertEqual(2, length(receive_messages(2))),
     ok = emqx_client:disconnect(C3),
 
-    {ok, C4, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C4, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C4, nth(5, ?WILD_TOPICS), 0),
     ?assertEqual(1, length(receive_messages(1))),
     ok = emqx_client:disconnect(C4),
 
-    {ok, C5, _} = emqx_client:start_link([{clean_start, true}]),
+    {ok, C5, _} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, #{}, [0]} = emqx_client:subscribe(C5, nth(6, ?WILD_TOPICS), 0),
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqx_client:disconnect(C5).
