@@ -39,7 +39,7 @@ load(Env) ->
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
 on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, first := First}) ->
-    if 
+    if
         Rh =:= 0 orelse (Rh =:= 1 andalso First =:= true) ->
             Msgs = case emqx_topic:wildcard(Topic) of
                        false -> read_messages(Topic);
@@ -77,9 +77,9 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             emqx_metrics:set('messages/retained', retained_count()),
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
-                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 -> 
+                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 ->
                     emqx_time:now_ms(Ts) + Interval * 1000;
-                #message{timestamp = Ts} -> 
+                #message{timestamp = Ts} ->
                     case proplists:get_value(expiry_interval, Env, 0) of
                         0 -> 0;
                         Interval -> emqx_time:now_ms(Ts) + Interval
@@ -105,18 +105,18 @@ unload() ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/3).
 
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% API
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 %% @doc Start the retainer
 -spec(start_link(Env :: list()) -> emqx_types:startlink_ret()).
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
 
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 %% gen_server callbacks
-%%-----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
 
 init([Env]) ->
     Copies = case proplists:get_value(storage_type, Env, disc) of
@@ -124,13 +124,16 @@ init([Env]) ->
                  disc      -> disc_copies;
                  disc_only -> disc_only_copies
              end,
+    StoreProps = [{ets, [compressed,
+                         {read_concurrency, true},
+                         {write_concurrency, true}]},
+                  {dets, [{auto_save, 1000}]}],
     ok = ekka_mnesia:create_table(?TAB, [
                 {type, set},
                 {Copies, [node()]},
                 {record_name, retained},
                 {attributes, record_info(fields, retained)},
-                {storage_properties, [{ets, [compressed]},
-                                      {dets, [{auto_save, 1000}]}]}]),
+                {storage_properties, StoreProps}]),
     ok = ekka_mnesia:copy_table(?TAB),
     case mnesia:table_info(?TAB, storage_type) of
         Copies -> ok;
