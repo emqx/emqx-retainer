@@ -6,8 +6,7 @@ BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx emqx30
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.1.1
 
-TEST_DEPS = emqx_ct_helpers emqx_management
-dep_emqx_ct_helpers = git-emqx https://github.com/emqx/emqx-ct-helpers
+TEST_DEPS = emqx_management
 dep_emqx_management = git-emqx https://github.com/emqx/emqx-management emqx30
 
 NO_AUTOPATCH = cuttlefish
