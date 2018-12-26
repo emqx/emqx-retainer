@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,11 +11,8 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
 
--module(emq_retainer_sup).
-
--author("Feng Lee <feng@emqtt.io>").
+-module(emqx_retainer_sup).
 
 -behaviour(supervisor).
 
@@ -24,12 +20,15 @@
 
 -export([init/1]).
 
--define(M, emq_retainer).
-
 start_link(Env) ->
 	supervisor:start_link({local, ?MODULE}, ?MODULE, [Env]).
 
 init([Env]) ->
-	{ok, {{one_for_one, 10, 100}, [
-           {?M, {?M, start_link, [Env]}, permanent, 5000, worker, [?M]}]}}.
+	{ok, {{one_for_one, 10, 3600},
+          [#{id       => retainer,
+             start    => {emqx_retainer, start_link, [Env]},
+             restart  => permanent,
+             shutdown => 5000,
+             type     => worker,
+             modules  => [emqx_retainer]}]}}.
 

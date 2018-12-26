@@ -1,13 +1,13 @@
 
-EMQ Retainer
-============
+EMQ X Retainer
+==============
 
 The retainer plugin is responsible for storing retained MQTT messages.
 
 Configuration
 -------------
 
-etc/emq_retainer.conf:
+etc/emqx_retainer.conf:
 
 ```
 ## Where to store the retained messages.
@@ -24,7 +24,7 @@ retainer.storage_type = ram
 ## Maximum number of retained messages allowed.
 ##
 ## Value: Number >= 0
-retainer.max_message_num = 1000000
+retainer.max_retained_messages = 1000000
 
 ## Maximum payload size of a retained message.
 ##
@@ -55,5 +55,5 @@ Apache License Version 2.0
 Author
 ------
 
-Feng at emqtt.io
+EMQ X Team
 
