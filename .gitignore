@@ -13,3 +13,4 @@ data/
 *.swo
 .erlang.mk/
 emqx_retainer.d
+erlang.mk
