@@ -8,11 +8,9 @@ BRANCH := $(if $(filter $(CUR_BRANCH), master develop testing), $(CUR_BRANCH), t
 BUILD_DEPS = emqx cuttlefish emqx_management
 dep_emqx = git-emqx https://github.com/emqx/emqx $(BRANCH)
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.2.1
-dep_emqx_management = git-emqx https://github.com/emqx/emqx-management testing
+dep_emqx_management = git-emqx https://github.com/emqx/emqx-management $(BRANCH)
 
 NO_AUTOPATCH = cuttlefish
-
-
 
 ERLC_OPTS += +debug_info
 ERLC_OPTS += +warnings_as_errors +warn_export_all +warn_unused_import
@@ -27,7 +25,7 @@ include erlang.mk
 CUTTLEFISH_SCRIPT = _build/default/lib/cuttlefish/cuttlefish
 
 app.config: $(CUTTLEFISH_SCRIPT) etc/emqx_management.conf
-	$(verbose) $(CUTTLEFISH_SCRIPT) -l info -e etc/ -c etc/emqx_management.conf -i priv/emqx_management.schema -d data
+	$(verbose) $(CUTTLEFISH_SCRIPT) -l info -e etc/ -c etc/emqx_retainer.conf -i priv/emqx_retainer.schema -d data
 
 $(CUTTLEFISH_SCRIPT): rebar-deps
 	@if [ ! -f cuttlefish ]; then make -C _build/default/lib/cuttlefish; fi
