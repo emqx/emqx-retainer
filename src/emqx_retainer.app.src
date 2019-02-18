@@ -3,5 +3,5 @@
               {vsn,"git"},
               {modules,[]},
               {registered,[emqx_retainer_sup]},
-              {applications,[kernel,stdlib]},
+              {applications,[kernel,stdlib,clique]},
               {mod,{emqx_retainer_app,[]}}]}.
