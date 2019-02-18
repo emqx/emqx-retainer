@@ -1,8 +1,7 @@
-{application, emqx_retainer, [
-	{description, "EMQ X Retainer"},
-	{vsn, "git"},
-	{modules, ['emqx_retainer','emqx_retainer_app','emqx_retainer_cfg','emqx_retainer_cli','emqx_retainer_sup']},
-	{registered, [emqx_retainer_sup]},
-	{applications, [kernel,stdlib]},
-	{mod, {emqx_retainer_app, []}}
-]}.
+{application,emqx_retainer,
+             [{description,"EMQ X Retainer"},
+              {vsn,"git"},
+              {modules,[]},
+              {registered,[emqx_retainer_sup]},
+              {applications,[kernel,stdlib]},
+              {mod,{emqx_retainer_app,[]}}]}.
