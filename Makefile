@@ -4,10 +4,12 @@ PROJECT_DESCRIPTION = EMQ X Retainer
 CUR_BRANCH := $(shell git branch | grep -e "^*" | cut -d' ' -f 2)
 BRANCH := $(if $(filter $(CUR_BRANCH), master develop testing), $(CUR_BRANCH), testing)
 
-BUILD_DEPS = emqx cuttlefish emqx_management
+DEPS = clique
+dep_clique      = git-emqx https://github.com/emqx/clique v0.3.11
+
+BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx $(BRANCH)
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.2.1
-dep_emqx_management = git-emqx https://github.com/emqx/emqx-management $(BRANCH)
 
 NO_AUTOPATCH = cuttlefish
 
@@ -23,7 +25,7 @@ include erlang.mk
 
 CUTTLEFISH_SCRIPT = _build/default/lib/cuttlefish/cuttlefish
 
-app.config: $(CUTTLEFISH_SCRIPT) etc/emqx_management.conf
+app.config: $(CUTTLEFISH_SCRIPT) etc/emqx_retainer.conf
 	$(verbose) $(CUTTLEFISH_SCRIPT) -l info -e etc/ -c etc/emqx_retainer.conf -i priv/emqx_retainer.schema -d data
 
 $(CUTTLEFISH_SCRIPT): rebar-deps
