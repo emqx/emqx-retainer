@@ -11,6 +11,9 @@ BUILD_DEPS = emqx cuttlefish
 dep_emqx = git-emqx https://github.com/emqx/emqx $(BRANCH)
 dep_cuttlefish = git-emqx https://github.com/emqx/cuttlefish v2.2.1
 
+TEST_DEPS = emqx_management
+dep_emqx_management = git-emqx https://github.com/emqx/emqx-management $(BRANCH)
+
 NO_AUTOPATCH = cuttlefish
 
 ERLC_OPTS += +debug_info
