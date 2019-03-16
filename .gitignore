@@ -15,3 +15,4 @@ data/
 emqx_retainer.d
 erlang.mk
 rebar3.crashdump
+_build
