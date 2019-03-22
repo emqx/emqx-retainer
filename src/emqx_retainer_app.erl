@@ -16,7 +16,11 @@
 
 -behaviour(application).
 
--export([start/2, stop/1]).
+-emqx_plugin(?MODULE).
+
+-export([ start/2
+        , stop/1
+        ]).
 
 start(_Type, _Args) ->
     Env = application:get_all_env(emqx_retainer),

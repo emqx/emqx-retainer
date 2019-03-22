@@ -16,7 +16,11 @@
 
 -include("emqx_retainer.hrl").
 
--export([load/0, cmd/1, unload/0]).
+%% APIs
+-export([ load/0
+        , cmd/1
+        , unload/0
+        ]).
 
 load() ->
     emqx_ctl:register_command(retainer, {?MODULE, cmd}, []).

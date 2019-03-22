@@ -14,9 +14,15 @@
 
 -module(emqx_retainer_cfg).
 
--export([register/0, unregister/0]).
+-export([ register/0
+        , unregister/0
+        ]).
 
 -define(APP, emqx_retainer).
+
+%%------------------------------------------------------------------------------
+%% APIs
+%%------------------------------------------------------------------------------
 
 register() ->
     clique_config:load_schema([code:priv_dir(?APP)], ?APP),
@@ -25,6 +31,10 @@ register() ->
 unregister() ->
     unregister_config(),
     clique_config:unload_schema(?APP).
+
+%%------------------------------------------------------------------------------
+%% Internal Functions
+%%------------------------------------------------------------------------------
 
 register_config() ->
     Keys = keys(),
