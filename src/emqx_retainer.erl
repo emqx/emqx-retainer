@@ -21,12 +21,23 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -export([start_link/1]).
--export([load/1, unload/0]).
--export([on_session_subscribed/3, on_message_publish/2]).
+
+-export([ load/1
+        , unload/0
+        ]).
+
+-export([ on_session_subscribed/3
+        , on_message_publish/2
+        ]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-         code_change/3]).
+-export([ init/1
+        , handle_call/3
+        , handle_cast/2
+        , handle_info/2
+        , terminate/2
+        , code_change/3
+        ]).
 
 -record(state, {stats_fun, stats_timer, expiry_timer}).
 
