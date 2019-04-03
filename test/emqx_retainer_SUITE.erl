@@ -78,7 +78,7 @@ receive_messages(Count, Msgs) ->
         Other ->
             ct:log("Other Msg: ~p~n",[Other]),
             receive_messages(Count, Msgs)
-    after 1000 ->
+    after 2000 ->
             Msgs
     end.
 
