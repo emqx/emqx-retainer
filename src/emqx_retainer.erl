@@ -18,6 +18,7 @@
 
 -include("emqx_retainer.hrl").
 -include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -export([start_link/1]).
@@ -98,9 +99,9 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             end,
             mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
         {true, _} ->
-            emqx_logger:error("[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
+            ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
-            emqx_logger:error("[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
+            ?LOG(error, "[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
                               "for payload is too big!", [Topic, iolist_size(Payload)])
     end.
 
@@ -165,11 +166,11 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    emqx_logger:error("[Retainer] unexpected call: ~p", [Req]),
+    ?LOG(error, "[Retainer] unexpected call: ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    emqx_logger:error("[Retainer] unexpected cast: ~p", [Msg]),
+    ?LOG(error, "[Retainer] unexpected cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
@@ -181,7 +182,7 @@ handle_info(expire, State) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    emqx_logger:error("[Retainer] unexpected info: ~p", [Info]),
+    ?LOG(error, "[Retainer] unexpected info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) ->
