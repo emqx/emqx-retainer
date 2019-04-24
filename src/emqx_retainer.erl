@@ -166,11 +166,11 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    ?LOG(error, "[Retainer] unexpected call: ~p", [Req]),
+    ?LOG(error, "[Retainer] Unexpected call: ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    ?LOG(error, "[Retainer] unexpected cast: ~p", [Msg]),
+    ?LOG(error, "[Retainer] Unexpected cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
@@ -182,7 +182,7 @@ handle_info(expire, State) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    ?LOG(error, "[Retainer] unexpected info: ~p", [Info]),
+    ?LOG(error, "[Retainer] Unexpected info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) ->
