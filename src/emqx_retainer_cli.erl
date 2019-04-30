@@ -41,10 +41,15 @@ cmd(["clean"]) ->
         {aborted, R} -> emqx_cli:print("Aborted ~p~n", [R])
     end;
 
+cmd(["clean", Topic]) ->
+    Lines = emqx_retainer:clean(list_to_binary(Topic)),
+    emqx_cli:print("Cleaned ~p retained messages~n", [Lines]);
+
 cmd(_) ->
     emqx_cli:usage([{"retainer info",   "Show the count of retained messages"},
                     {"retainer topics", "Show all topics of retained messages"},
-                    {"retainer clean",  "Clean all retained messages"}]).
+                    {"retainer clean",  "Clean all retained messages"},
+                    {"retainer clean <Topic>",  "Clean retained messages by the specified topic filter"}]).
 
 unload() ->
     emqx_ctl:unregister_command(retainer).
