@@ -20,5 +20,4 @@ xref:
 
 clean:
 	@rm -rf _build
-	@rm -f data/app.*.config
-	@rm -f data/vm.*.args
+	@rm -f data/app.*.config data/vm.*.args rebar.lock
