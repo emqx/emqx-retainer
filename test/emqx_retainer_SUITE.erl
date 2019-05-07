@@ -68,11 +68,9 @@ test_message_expiry(_) ->
     emqx_client:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
     ok = emqx_client:disconnect(C1),
 
-    %% Don't expire
-    timer:sleep(10),
     {ok, C2} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C2),
-    {ok, #{}, [0]} = emqx_client:subscribe(C2, <<"qos/+">>, 0),
+    {ok, #{}, [2]} = emqx_client:subscribe(C2, <<"qos/+">>, 2),
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqx_client:disconnect(C2),
 
@@ -121,8 +119,8 @@ test_expiry_timer(_) ->
 test_subscribe_topics(_) ->
     {ok, C1} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C1),
-    lists:foreach(fun(N) -> 
-                          emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]) 
+    lists:foreach(fun(N) ->
+                          emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}])
                   end, [1,2,3,4,5]),
     ok = emqx_client:disconnect(C1),
     timer:sleep(10),
