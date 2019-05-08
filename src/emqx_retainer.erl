@@ -31,6 +31,8 @@
         , on_message_publish/2
         ]).
 
+-export([clean/1]).
+
 %% gen_server callbacks
 -export([ init/1
         , handle_call/3
@@ -125,6 +127,19 @@ unload() ->
 -spec(start_link(Env :: list()) -> emqx_types:startlink_ret()).
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
+
+clean(Topic) when is_binary(Topic) ->
+    case emqx_topic:wildcard(Topic) of
+        true -> match_delete_messages(Topic);
+        false ->
+            Fun = fun() ->
+                      case mnesia:read({?TAB, Topic}) of
+                          [] -> 0;
+                          [_M] -> mnesia:delete({?TAB, Topic}), 1
+                      end
+                  end,
+            {atomic, N} = mnesia:transaction(Fun), N
+    end.
 
 %%------------------------------------------------------------------------------
 %% gen_server callbacks
@@ -237,6 +252,22 @@ match_messages(Filter) ->
             lists:foreach(fun(Msg) -> mnesia:delete({?TAB, Msg#message.topic}) end, Expired)
         end),
     Unexpired.
+
+-spec(match_delete_messages(binary()) -> integer()).
+match_delete_messages(Filter) ->
+    %% TODO: optimize later...
+    Fun = fun(#retained{topic = Name}, Topics) ->
+              case emqx_topic:match(Name, Filter) of
+                true -> mnesia:delete({?TAB, Name}), [Name | Topics];
+                false -> Topics
+              end
+          end,
+    Topics = mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], ?TAB]),
+    mnesia:transaction(
+        fun() ->
+            lists:foreach(fun(Topic) -> mnesia:delete({?TAB, Topic}) end, Topics)
+        end),
+    length(Topics).
 
 -spec(expire_messages() -> any()).
 expire_messages() ->
