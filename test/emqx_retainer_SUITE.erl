@@ -68,7 +68,7 @@ test_message_expiry(_) ->
     emqx_client:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
     ok = emqx_client:disconnect(C1),
 
-    timer:sleep(500),
+    timer:sleep(1000),
 
     {ok, C2} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C2),
