@@ -73,6 +73,7 @@ test_message_expiry(_) ->
     {ok, C2} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C2),
     {ok, #{}, [2]} = emqx_client:subscribe(C2, <<"qos/+">>, 2),
+    timer:sleep(50),
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqx_client:disconnect(C2),
 
