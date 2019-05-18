@@ -18,6 +18,7 @@
 
 -include("emqx_retainer.hrl").
 -include_lib("emqx/include/emqx.hrl").
+-include_lib("emqx/include/logger.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -export([start_link/1]).
@@ -29,6 +30,8 @@
 -export([ on_session_subscribed/3
         , on_message_publish/2
         ]).
+
+-export([clean/1]).
 
 %% gen_server callbacks
 -export([ init/1
@@ -98,9 +101,9 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             end,
             mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
         {true, _} ->
-            emqx_logger:error("[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
+            ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true}->
-            emqx_logger:error("[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
+            ?LOG(error, "[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
                               "for payload is too big!", [Topic, iolist_size(Payload)])
     end.
 
@@ -124,6 +127,19 @@ unload() ->
 -spec(start_link(Env :: list()) -> emqx_types:startlink_ret()).
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
+
+clean(Topic) when is_binary(Topic) ->
+    case emqx_topic:wildcard(Topic) of
+        true -> match_delete_messages(Topic);
+        false ->
+            Fun = fun() ->
+                      case mnesia:read({?TAB, Topic}) of
+                          [] -> 0;
+                          [_M] -> mnesia:delete({?TAB, Topic}), 1
+                      end
+                  end,
+            {atomic, N} = mnesia:transaction(Fun), N
+    end.
 
 %%------------------------------------------------------------------------------
 %% gen_server callbacks
@@ -165,11 +181,11 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    emqx_logger:error("[Retainer] unexpected call: ~p", [Req]),
+    ?LOG(error, "[Retainer] Unexpected call: ~p", [Req]),
     {reply, ignored, State}.
 
 handle_cast(Msg, State) ->
-    emqx_logger:error("[Retainer] unexpected cast: ~p", [Msg]),
+    ?LOG(error, "[Retainer] Unexpected cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
@@ -181,7 +197,7 @@ handle_info(expire, State) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    emqx_logger:error("[Retainer] unexpected info: ~p", [Info]),
+    ?LOG(error, "[Retainer] Unexpected info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) ->
@@ -236,6 +252,22 @@ match_messages(Filter) ->
             lists:foreach(fun(Msg) -> mnesia:delete({?TAB, Msg#message.topic}) end, Expired)
         end),
     Unexpired.
+
+-spec(match_delete_messages(binary()) -> integer()).
+match_delete_messages(Filter) ->
+    %% TODO: optimize later...
+    Fun = fun(#retained{topic = Name}, Topics) ->
+              case emqx_topic:match(Name, Filter) of
+                true -> mnesia:delete({?TAB, Name}), [Name | Topics];
+                false -> Topics
+              end
+          end,
+    Topics = mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], ?TAB]),
+    mnesia:transaction(
+        fun() ->
+            lists:foreach(fun(Topic) -> mnesia:delete({?TAB, Topic}) end, Topics)
+        end),
+    length(Topics).
 
 -spec(expire_messages() -> any()).
 expire_messages() ->
