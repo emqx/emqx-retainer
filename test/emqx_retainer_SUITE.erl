@@ -25,49 +25,27 @@
 
 -import(lists, [nth/2]).
 
--define(TOPICS, [<<"TopicA">>, <<"TopicA/B">>, <<"Topic/C">>, <<"TopicA/C">>,
-                 <<"/TopicA">>]).
+-define(TOPICS, [ <<"TopicA">>
+                , <<"TopicA/B">>
+                , <<"Topic/C">>
+                , <<"TopicA/C">>
+                , <<"/TopicA">>]).
 
--define(WILD_TOPICS, [<<"TopicA/+">>, <<"+/C">>, <<"#">>, <<"/#">>, <<"/+">>,
-                      <<"+/+">>, <<"TopicA/#">>]).
+-define(WILD_TOPICS, [ <<"TopicA/+">>
+                     , <<"+/C">>
+                     , <<"#">>
+                     , <<"/#">>
+                     , <<"/+">>
+                     , <<"+/+">>
+                     , <<"TopicA/#">>]).
 
--define(MQTT_SSL_TWOWAY, [{cacertfile, "certs/cacert.pem"},
-                          {verify, verify_peer},
-                          {fail_if_no_peer_cert, true}]).
-
--define(MQTT_SSL_CLIENT, [{keyfile, "certs/client-key.pem"},
-                          {cacertfile, "certs/cacert.pem"},
-                          {certfile, "certs/client-cert.pem"}]).
-
--define(CIPHERS,    [{ciphers,
-                        ["ECDHE-ECDSA-AES256-GCM-SHA384",
-                         "ECDHE-RSA-AES256-GCM-SHA384",
-                         "ECDHE-ECDSA-AES256-SHA384",
-                         "ECDHE-RSA-AES256-SHA384","ECDHE-ECDSA-DES-CBC3-SHA",
-                         "ECDH-ECDSA-AES256-GCM-SHA384",
-                         "ECDH-RSA-AES256-GCM-SHA384",
-                         "ECDH-ECDSA-AES256-SHA384","ECDH-RSA-AES256-SHA384",
-                         "DHE-DSS-AES256-GCM-SHA384","DHE-DSS-AES256-SHA256",
-                         "AES256-GCM-SHA384","AES256-SHA256",
-                         "ECDHE-ECDSA-AES128-GCM-SHA256",
-                         "ECDHE-RSA-AES128-GCM-SHA256",
-                         "ECDHE-ECDSA-AES128-SHA256",
-                         "ECDHE-RSA-AES128-SHA256",
-                         "ECDH-ECDSA-AES128-GCM-SHA256",
-                         "ECDH-RSA-AES128-GCM-SHA256",
-                         "ECDH-ECDSA-AES128-SHA256","ECDH-RSA-AES128-SHA256",
-                         "DHE-DSS-AES128-GCM-SHA256","DHE-DSS-AES128-SHA256",
-                         "AES128-GCM-SHA256","AES128-SHA256",
-                         "ECDHE-ECDSA-AES256-SHA","ECDHE-RSA-AES256-SHA",
-                         "DHE-DSS-AES256-SHA","ECDH-ECDSA-AES256-SHA",
-                         "ECDH-RSA-AES256-SHA","AES256-SHA",
-                         "ECDHE-ECDSA-AES128-SHA","ECDHE-RSA-AES128-SHA",
-                         "DHE-DSS-AES128-SHA","ECDH-ECDSA-AES128-SHA",
-                         "ECDH-RSA-AES128-SHA","AES128-SHA"]}]).
+all() -> [ test_message_expiry
+         , test_expiry_timer
+         , test_subscribe_topics
+         ].
 
 receive_messages(Count) ->
     receive_messages(Count, []).
-
 receive_messages(0, Msgs) ->
     Msgs;
 receive_messages(Count, Msgs) ->
@@ -82,20 +60,15 @@ receive_messages(Count, Msgs) ->
             Msgs
     end.
 
-all() -> [ test_message_expiry
-         , test_expiry_timer
-         , test_subscribe_topics
-         ].
-
 test_message_expiry(_) ->
     {ok, C1} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C1),
     emqx_client:publish(C1, <<"qos/0">>, #{'Message-Expiry-Interval' => 2}, <<"QoS0">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C1, <<"qos/1">>, #{'Message-Expiry-Interval' => 2}, <<"QoS1">>, [{qos, 1}, {retain, true}]),
     emqx_client:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
+    timer:sleep(100),
     ok = emqx_client:disconnect(C1),
 
-    timer:sleep(500),
     {ok, C2} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C2),
     {ok, #{}, [2]} = emqx_client:subscribe(C2, <<"qos/+">>, 2),
@@ -148,7 +121,7 @@ test_subscribe_topics(_) ->
     {ok, C1} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C1),
     lists:foreach(fun(N) ->
-                    emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]) 
+                          emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}])
                   end, [1,2,3,4,5]),
     ok = emqx_client:disconnect(C1),
     timer:sleep(10),
@@ -177,15 +150,13 @@ test_subscribe_topics(_) ->
     ok = emqx_client:disconnect(C5).
 
 init_per_suite(Config) ->
-    [run_setup_steps(App) || App <- [emqx, emqx_management]],
+    emqx_ct_helpers:start_apps([emqx, emqx_retainer]),
     Config.
 
 end_per_suite(_Config) ->
-    emqx:shutdown().
+    emqx_ct_helpers:stop_apps([emqx_retainer, emqx]).
 
 init_per_testcase(TestCase, Config) ->
-    NewConfig = generate_config(emqx_retainer),
-    lists:foreach(fun set_app_env/1, NewConfig),
     case TestCase of
         test_message_expiry ->
             application:set_env(emqx_retainer, expiry_interval, 0),
@@ -202,83 +173,3 @@ init_per_testcase(TestCase, Config) ->
 
 end_per_testcase(_TestCase, _Config) ->
     application:stop(emqx_retainer).
-
-run_setup_steps(App) ->
-    NewConfig = generate_config(App),
-    lists:foreach(fun set_app_env/1, NewConfig),
-    application:ensure_all_started(App),
-    ct:log("Applications: ~p", [application:loaded_applications()]).
-
-generate_config(emqx) ->
-    Schema = cuttlefish_schema:files([local_path(["deps", "emqx", "priv", "emqx.schema"])]),
-    Conf = conf_parse:file([local_path(["deps", "emqx", "etc", "emqx.conf"])]),
-    cuttlefish_generator:map(Schema, Conf);
-
-generate_config(emqx_management) ->
-    Schema = cuttlefish_schema:files([local_path(["deps", "emqx_management", "priv", "emqx_management.schema"])]),
-    Conf = conf_parse:file([local_path(["deps", "emqx_management", "etc", "emqx_management.conf"])]),
-    cuttlefish_generator:map(Schema, Conf);
-
-generate_config(emqx_retainer) ->
-    Schema = cuttlefish_schema:files([local_path(["priv", "emqx_retainer.schema"])]),
-    Conf = conf_parse:file([local_path(["etc", "emqx_retainer.conf"])]),
-    cuttlefish_generator:map(Schema, Conf).
-
-get_base_dir(Module) ->
-    {file, Here} = code:is_loaded(Module),
-    filename:dirname(filename:dirname(Here)).
-
-get_base_dir() ->
-    get_base_dir(?MODULE).
-
-local_path(Components, Module) ->
-    filename:join([get_base_dir(Module) | Components]).
-
-local_path(Components) ->
-    local_path(Components, ?MODULE).
-
-set_app_env({App, Lists}) ->
-    lists:foreach(fun({acl_file, _Var}) ->
-                      application:set_env(App, acl_file, local_path(["deps", "emqx", "etc", "acl.conf"]));
-                     ({plugins_loaded_file, _Var}) ->
-                      application:set_env(App, plugins_loaded_file, local_path(["deps","emqx", "test", "emqx_SUITE_data", "loaded_plugins"]));
-                     ({Par, Var}) ->
-                      application:set_env(App, Par, Var)
-                  end, Lists).
-
-change_opts(SslType) ->
-    {ok, Listeners} = application:get_env(?APP, listeners),
-    NewListeners =
-    lists:foldl(fun({Protocol, Port, Opts} = Listener, Acc) ->
-    case Protocol of
-    ssl ->
-            SslOpts = proplists:get_value(ssl_options, Opts),
-            Keyfile = local_path(["etc/certs", "key.pem"]),
-            Certfile = local_path(["etc/certs", "cert.pem"]),
-            TupleList1 = lists:keyreplace(keyfile, 1, SslOpts, {keyfile, Keyfile}),
-            TupleList2 = lists:keyreplace(certfile, 1, TupleList1, {certfile, Certfile}),
-            TupleList3 =
-            case SslType of
-            ssl_twoway->
-                CAfile = local_path(["etc", proplists:get_value(cacertfile, ?MQTT_SSL_TWOWAY)]),
-                MutSslList = lists:keyreplace(cacertfile, 1, ?MQTT_SSL_TWOWAY, {cacertfile, CAfile}),
-                lists:merge(TupleList2, MutSslList);
-            _ ->
-                lists:filter(fun ({cacertfile, _}) -> false;
-                                 ({verify, _}) -> false;
-                                 ({fail_if_no_peer_cert, _}) -> false;
-                                 (_) -> true
-                             end, TupleList2)
-            end,
-            [{Protocol, Port, lists:keyreplace(ssl_options, 1, Opts, {ssl_options, TupleList3})} | Acc];
-        _ ->
-            [Listener | Acc]
-    end
-    end, [], Listeners),
-    application:set_env(?APP, listeners, NewListeners).
-
-client_ssl_twoway() ->
-    [{Key, local_path(["etc", File])} || {Key, File} <- ?MQTT_SSL_CLIENT] ++ ?CIPHERS.
-
-client_ssl() ->
-    ?CIPHERS ++ [{reuse_sessions, true}].
