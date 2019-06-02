@@ -88,7 +88,7 @@ sort_retained(Msgs)  ->
 store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
-            emqx_metrics:set('messages/retained', retained_count()),
+            ok = emqx_metrics:set('messages.retained', retained_count()),
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
                 #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 ->
