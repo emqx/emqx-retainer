@@ -167,7 +167,7 @@ init([Env]) ->
         _Other ->
             {atomic, ok} = mnesia:change_table_copy_type(?TAB, node(), Copies)
     end,
-    StatsFun = emqx_stats:statsfun('retained/count', 'retained/max'),
+    StatsFun = emqx_stats:statsfun('retained.count', 'retained.max'),
     {ok, StatsTimer} = timer:send_interval(timer:seconds(1), stats),
     State = #state{stats_fun = StatsFun, stats_timer = StatsTimer},
     {ok, start_expire_timer(proplists:get_value(expiry_interval, Env, 0), State)}.
