@@ -23,3 +23,4 @@ logs/
 rebar.lock
 test/ct.cover.spec
 etc/emqx_retainer.conf.rendered
+.rebar3/
