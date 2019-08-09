@@ -213,7 +213,7 @@ code_change(_OldVsn, State, _Extra) ->
 dispatch_retained(_Topic, []) ->
     ok;
 dispatch_retained(Topic, Msgs) ->
-    [self() ! {deliver, Topic, Msg} || Msg  <- Msgs].
+    [self() ! {deliver, Topic, Msg} || Msg  <- sort_retained(Msgs)].
 
 -spec(read_messages(binary()) -> [emqx_types:message()]).
 read_messages(Topic) ->
