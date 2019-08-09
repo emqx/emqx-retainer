@@ -52,9 +52,9 @@ load(Env) ->
     emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/3, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
-on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, first := First}) ->
+on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, new := New}) ->
     if
-        Rh =:= 0 orelse (Rh =:= 1 andalso First =:= true) ->
+        Rh =:= 0 orelse (Rh =:= 1 andalso New =:= true) ->
             Msgs = case emqx_topic:wildcard(Topic) of
                        false -> read_messages(Topic);
                        true  -> match_messages(Topic)
