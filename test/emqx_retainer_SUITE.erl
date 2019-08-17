@@ -90,9 +90,10 @@ test_message_expiry(_) ->
     emqx_client:publish(C4, <<"test/C">>, #{'Message-Expiry-Interval' => 5}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
     % emqx_client:publish(C4, <<"test/D">>, <<"don't expire if retainer.expiry_interval equals to 0">>, [{qos, 0}, {retain, true}]),
     emqx_client:publish(C4, <<"$SYS/E">>, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    timer:sleep(20),
     ok = emqx_client:disconnect(C4),
-
     timer:sleep(3000),
+    
     {ok, C5} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqx_client:connect(C5),
     {ok, #{}, [0]} = emqx_client:subscribe(C5, <<"test/C">>, 0),
@@ -123,6 +124,7 @@ test_subscribe_topics(_) ->
     lists:foreach(fun(N) ->
                           emqx_client:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}])
                   end, [1,2,3,4,5]),
+    timer:sleep(20),
     ok = emqx_client:disconnect(C1),
     timer:sleep(10),
     {ok, C2} = emqx_client:start_link([{clean_start, true}, {proto_ver, v5}]),
