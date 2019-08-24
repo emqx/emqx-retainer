@@ -1,4 +1,5 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%--------------------------------------------------------------------
+%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -11,6 +12,7 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
 
 -module(emqx_retainer_cfg).
 
@@ -20,9 +22,9 @@
 
 -define(APP, emqx_retainer).
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% APIs
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 register() ->
     clique_config:load_schema([code:priv_dir(?APP)], ?APP),
@@ -32,9 +34,9 @@ unregister() ->
     unregister_config(),
     clique_config:unload_schema(?APP).
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% Internal Functions
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 register_config() ->
     Keys = keys(),
@@ -51,5 +53,8 @@ unregister_config() ->
     clique:unregister_config_whitelist(Keys, ?APP).
 
 keys() ->
-    ["retainer.max_retained_messages", "retainer.max_payload_size", "retainer.expiry_interval"].
+    ["retainer.max_retained_messages",
+     "retainer.max_payload_size",
+     "retainer.expiry_interval"
+    ].
 
