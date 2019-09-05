@@ -28,30 +28,30 @@ load() ->
     emqx_ctl:register_command(retainer, {?MODULE, cmd}, []).
 
 cmd(["info"]) ->
-    emqx_cli:print("retained/total: ~w~n", [mnesia:table_info(?TAB, size)]);
+    emqx_mgmt:print("retained/total: ~w~n", [mnesia:table_info(?TAB, size)]);
 
 cmd(["topics"]) ->
     case mnesia:dirty_all_keys(?TAB) of
         []     -> ignore;
-        Topics -> lists:foreach(fun(Topic) -> emqx_cli:print("~s~n", [Topic]) end, Topics)
+        Topics -> lists:foreach(fun(Topic) -> emqx_mgmt:print("~s~n", [Topic]) end, Topics)
     end;
 
 cmd(["clean"]) ->
     Size = mnesia:table_info(?TAB, size),
     case mnesia:clear_table(?TAB) of
-        {atomic, ok} -> emqx_cli:print("Cleaned ~p retained messages~n", [Size]);
-        {aborted, R} -> emqx_cli:print("Aborted ~p~n", [R])
+        {atomic, ok} -> emqx_mgmt:print("Cleaned ~p retained messages~n", [Size]);
+        {aborted, R} -> emqx_mgmt:print("Aborted ~p~n", [R])
     end;
 
 cmd(["clean", Topic]) ->
     Lines = emqx_retainer:clean(list_to_binary(Topic)),
-    emqx_cli:print("Cleaned ~p retained messages~n", [Lines]);
+    emqx_mgmt:print("Cleaned ~p retained messages~n", [Lines]);
 
 cmd(_) ->
-    emqx_cli:usage([{"retainer info",   "Show the count of retained messages"},
-                    {"retainer topics", "Show all topics of retained messages"},
-                    {"retainer clean",  "Clean all retained messages"},
-                    {"retainer clean <Topic>",  "Clean retained messages by the specified topic filter"}]).
+    emqx_mgmt:usage([{"retainer info",   "Show the count of retained messages"},
+                     {"retainer topics", "Show all topics of retained messages"},
+                     {"retainer clean",  "Clean all retained messages"},
+                     {"retainer clean <Topic>",  "Clean retained messages by the specified topic filter"}]).
 
 unload() ->
     emqx_ctl:unregister_command(retainer).
