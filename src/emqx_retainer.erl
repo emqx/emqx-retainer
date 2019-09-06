@@ -1,4 +1,5 @@
-%% Copyright (c) 2013-2019 EMQ Technologies Co., Ltd. All Rights Reserved.
+%%--------------------------------------------------------------------
+%% Copyright (c) 2019 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -11,6 +12,7 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
+%%--------------------------------------------------------------------
 
 -module(emqx_retainer).
 
@@ -44,15 +46,15 @@
 
 -record(state, {stats_fun, stats_timer, expiry_timer}).
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% Load/Unload
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 load(Env) ->
     emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/3, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
-on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, new := New}) ->
+on_session_subscribed(#{client_id := _ClientId}, Topic, #{rh := Rh, is_new := New}) ->
     if
         Rh =:= 0 orelse (Rh =:= 1 andalso New =:= true) ->
             Msgs = case emqx_topic:wildcard(Topic) of
@@ -119,9 +121,9 @@ unload() ->
     emqx:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqx:unhook('session.subscribed', fun ?MODULE:on_session_subscribed/3).
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% API
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 %% @doc Start the retainer
 -spec(start_link(Env :: list()) -> emqx_types:startlink_ret()).
@@ -141,9 +143,9 @@ clean(Topic) when is_binary(Topic) ->
             {atomic, N} = mnesia:transaction(Fun), N
     end.
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% gen_server callbacks
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 init([Env]) ->
     Copies = case proplists:get_value(storage_type, Env, disc) of
@@ -206,9 +208,9 @@ terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) -
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% Internal functions
-%%------------------------------------------------------------------------------
+%%--------------------------------------------------------------------
 
 dispatch_retained(_Topic, []) ->
     ok;
