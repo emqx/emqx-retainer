@@ -22,7 +22,6 @@
 -define(APP, emqx).
 
 -include_lib("eunit/include/eunit.hrl").
-
 -include_lib("common_test/include/ct.hrl").
 
 -import(lists, [nth/2]).
@@ -41,28 +40,55 @@
                      , <<"+/+">>
                      , <<"TopicA/#">>]).
 
-all() -> [ test_message_expiry
-         , test_expiry_timer
-         , test_subscribe_topics
-         ].
+all() -> emqx_ct:all(?MODULE).
 
-receive_messages(Count) ->
-    receive_messages(Count, []).
-receive_messages(0, Msgs) ->
-    Msgs;
-receive_messages(Count, Msgs) ->
-    receive
-        {publish, Msg} ->
-            ct:log("Msg: ~p ~n", [Msg]),
-            receive_messages(Count-1, [Msg|Msgs]);
-        Other ->
-            ct:log("Other Msg: ~p~n",[Other]),
-            receive_messages(Count, Msgs)
-    after 2000 ->
-            Msgs
-    end.
+%%--------------------------------------------------------------------
+%% CT Callbacks
+%%--------------------------------------------------------------------
 
-test_message_expiry(_) ->
+init_per_suite(Config) ->
+    emqx_ct_helpers:start_apps([emqx, emqx_retainer]),
+    Config.
+
+end_per_suite(_Config) ->
+    emqx_ct_helpers:stop_apps([emqx_retainer, emqx]).
+
+init_per_testcase(TestCase, Config) ->
+    case TestCase of
+        test_message_expiry ->
+            application:set_env(emqx_retainer, expiry_interval, 0),
+            application:set_env(emqx_retainer, expiry_timer_interval, 0);
+        test_expiry_timer ->
+            application:set_env(emqx_retainer, expiry_interval, 2000),
+            application:set_env(emqx_retainer, expiry_timer_interval, 1000);    % 1000ms
+        test_subscribe_topics ->
+            application:set_env(emqx_retainer, expiry_interval, 0),
+            application:set_env(emqx_retainer, expiry_timer_interval, 0)
+    end,
+    application:ensure_all_started(emqx_retainer),
+    Config.
+
+end_per_testcase(_TestCase, Config) ->
+    application:stop(emqx_retainer),
+    Config.
+
+%%--------------------------------------------------------------------
+%% Test cases for retainer
+%%--------------------------------------------------------------------
+
+t_load(_) ->
+    error('TODO').
+
+t_unload(_) ->
+    error('TODO').
+
+t_on_message_publish(_) ->
+    error('TODO').
+
+t_on_session_subscribed(_) ->
+    error('TODO').
+
+t_message_expiry(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C1),
     emqtt:publish(C1, <<"qos/0">>, #{'Message-Expiry-Interval' => 2}, <<"QoS0">>, [{qos, 0}, {retain, true}]),
@@ -95,7 +121,7 @@ test_message_expiry(_) ->
     timer:sleep(20),
     ok = emqtt:disconnect(C4),
     timer:sleep(3000),
-    
+
     {ok, C5} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C5),
     {ok, #{}, [0]} = emqtt:subscribe(C5, <<"test/C">>, 0),
@@ -106,7 +132,7 @@ test_message_expiry(_) ->
     ok = emqtt:disconnect(C5).
 
 %% expired message will be deleted by check timer
-test_expiry_timer(_) ->
+t_expiry_timer(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C1),
     emqtt:publish(C1, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
@@ -120,7 +146,7 @@ test_expiry_timer(_) ->
     {ok, #{}, [0]} = emqtt:subscribe(C2, <<"test/+">>, 0),
     ok = emqtt:disconnect(C2).
 
-test_subscribe_topics(_) ->
+t_subscribe_topics(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C1),
     lists:foreach(fun(N) ->
@@ -153,28 +179,23 @@ test_subscribe_topics(_) ->
     ?assertEqual(3, length(receive_messages(3))),
     ok = emqtt:disconnect(C5).
 
-init_per_suite(Config) ->
-    emqx_ct_helpers:start_apps([emqx, emqx_retainer]),
-    Config.
+%%--------------------------------------------------------------------
+%% Helper functions
+%%--------------------------------------------------------------------
 
-end_per_suite(_Config) ->
-    emqx_ct_helpers:stop_apps([emqx_retainer, emqx]).
-
-init_per_testcase(TestCase, Config) ->
-    case TestCase of
-        test_message_expiry ->
-            application:set_env(emqx_retainer, expiry_interval, 0),
-            application:set_env(emqx_retainer, expiry_timer_interval, 0);
-        test_expiry_timer ->
-            application:set_env(emqx_retainer, expiry_interval, 2000),
-            application:set_env(emqx_retainer, expiry_timer_interval, 1000);    % 1000ms
-        test_subscribe_topics ->
-            application:set_env(emqx_retainer, expiry_interval, 0),
-            application:set_env(emqx_retainer, expiry_timer_interval, 0)
-    end,
-    application:ensure_all_started(emqx_retainer),
-    Config.
-
-end_per_testcase(_TestCase, _Config) ->
-    application:stop(emqx_retainer).
+receive_messages(Count) ->
+    receive_messages(Count, []).
+receive_messages(0, Msgs) ->
+    Msgs;
+receive_messages(Count, Msgs) ->
+    receive
+        {publish, Msg} ->
+            ct:log("Msg: ~p ~n", [Msg]),
+            receive_messages(Count-1, [Msg|Msgs]);
+        Other ->
+            ct:log("Other Msg: ~p~n",[Other]),
+            receive_messages(Count, Msgs)
+    after 2000 ->
+            Msgs
+    end.
 
