@@ -55,13 +55,13 @@ end_per_suite(_Config) ->
 
 init_per_testcase(TestCase, Config) ->
     case TestCase of
-        test_message_expiry ->
+        t_message_expiry ->
             application:set_env(emqx_retainer, expiry_interval, 0),
             application:set_env(emqx_retainer, expiry_timer_interval, 0);
-        test_expiry_timer ->
+        t_expiry_timer ->
             application:set_env(emqx_retainer, expiry_interval, 2000),
             application:set_env(emqx_retainer, expiry_timer_interval, 1000);    % 1000ms
-        test_subscribe_topics ->
+        t_subscribe_topics ->
             application:set_env(emqx_retainer, expiry_interval, 0),
             application:set_env(emqx_retainer, expiry_timer_interval, 0)
     end,
@@ -76,17 +76,17 @@ end_per_testcase(_TestCase, Config) ->
 %% Test cases for retainer
 %%--------------------------------------------------------------------
 
-t_load(_) ->
-    error('TODO').
+% t_load(_) ->
+%     error('TODO').
 
-t_unload(_) ->
-    error('TODO').
+% t_unload(_) ->
+%     error('TODO').
 
-t_on_message_publish(_) ->
-    error('TODO').
+% t_on_message_publish(_) ->
+%     error('TODO').
 
-t_on_session_subscribed(_) ->
-    error('TODO').
+% t_on_session_subscribed(_) ->
+%     error('TODO').
 
 t_message_expiry(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
