@@ -24,22 +24,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--import(lists, [nth/2]).
-
--define(TOPICS, [ <<"TopicA">>
-                , <<"TopicA/B">>
-                , <<"Topic/C">>
-                , <<"TopicA/C">>
-                , <<"/TopicA">>]).
-
--define(WILD_TOPICS, [ <<"TopicA/+">>
-                     , <<"+/C">>
-                     , <<"#">>
-                     , <<"/#">>
-                     , <<"/+">>
-                     , <<"+/+">>
-                     , <<"TopicA/#">>]).
-
 all() -> emqx_ct:all(?MODULE).
 
 %%--------------------------------------------------------------------
@@ -54,16 +38,14 @@ end_per_suite(_Config) ->
     emqx_ct_helpers:stop_apps([emqx_retainer, emqx]).
 
 init_per_testcase(TestCase, Config) ->
+    emqx_retainer:clean(<<"#">>),
     case TestCase of
-        t_message_expiry ->
-            application:set_env(emqx_retainer, expiry_interval, 0),
-            application:set_env(emqx_retainer, expiry_timer_interval, 0);
+        t_message_expiry_2 ->
+            application:set_env(emqx_retainer, expiry_interval, 2000);
         t_expiry_timer ->
-            application:set_env(emqx_retainer, expiry_interval, 2000),
-            application:set_env(emqx_retainer, expiry_timer_interval, 1000);    % 1000ms
-        t_subscribe_topics ->
-            application:set_env(emqx_retainer, expiry_interval, 0),
-            application:set_env(emqx_retainer, expiry_timer_interval, 0)
+            application:set_env(emqx_retainer, expiry_interval, 2000);
+        _ ->
+            application:set_env(emqx_retainer, expiry_interval, 0)
     end,
     application:ensure_all_started(emqx_retainer),
     Config.
@@ -76,108 +58,124 @@ end_per_testcase(_TestCase, Config) ->
 %% Test cases for retainer
 %%--------------------------------------------------------------------
 
-% t_load(_) ->
-%     error('TODO').
+t_store_and_clean(_) ->
+    {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
+    {ok, _} = emqtt:connect(C1),
 
-% t_unload(_) ->
-%     error('TODO').
+    emqtt:publish(C1, <<"retained">>, <<"this is a retained message">>, [{qos, 0}, {retain, true}]),
+    timer:sleep(100),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(1, length(receive_messages(1))),
 
-% t_on_message_publish(_) ->
-%     error('TODO').
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"retained">>),
 
-% t_on_session_subscribed(_) ->
-%     error('TODO').
+    emqtt:publish(C1, <<"retained">>, <<"">>, [{qos, 0}, {retain, true}]),
+    timer:sleep(100),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(0, length(receive_messages(1))),
+
+    ok = emqtt:disconnect(C1).
+
+t_retain_handling(_) ->
+    {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
+    {ok, _} = emqtt:connect(C1),
+
+    emqtt:publish(C1, <<"retained">>, <<"this is a retained message">>, [{qos, 0}, {retain, true}]),
+
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(1, length(receive_messages(1))),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(1, length(receive_messages(1))),
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"retained">>),
+
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 1}]),
+    ?assertEqual(1, length(receive_messages(1))),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 1}]),
+    ?assertEqual(0, length(receive_messages(1))),
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"retained">>),
+
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 2}]),
+    ?assertEqual(0, length(receive_messages(1))),
+
+    emqtt:publish(C1, <<"retained">>, <<"">>, [{qos, 0}, {retain, true}]),
+    ok = emqtt:disconnect(C1).
+
+t_wildcard_subscription(_) ->
+    {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
+    {ok, _} = emqtt:connect(C1),
+    emqtt:publish(C1, <<"retained/0">>, <<"this is a retained message 0">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/1">>, <<"this is a retained message 1">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/2">>, <<"this is a retained message 2">>, [{qos, 0}, {retain, true}]),
+
+    {ok, #{}, [0]} = emqtt:subscribe(C1,  <<"retained/+">>, 0),
+    ?assertEqual(3, length(receive_messages(3))),
+
+    emqtt:publish(C1, <<"retained/0">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/1">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/2">>, <<"">>, [{qos, 0}, {retain, true}]),
+    ok = emqtt:disconnect(C1).
 
 t_message_expiry(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C1),
-    emqtt:publish(C1, <<"qos/0">>, #{'Message-Expiry-Interval' => 2}, <<"QoS0">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C1, <<"qos/1">>, #{'Message-Expiry-Interval' => 2}, <<"QoS1">>, [{qos, 1}, {retain, true}]),
-    emqtt:publish(C1, <<"qos/2">>, #{'Message-Expiry-Interval' => 2}, <<"QoS2">>, [{qos, 2}, {retain, true}]),
-    timer:sleep(100),
-    ok = emqtt:disconnect(C1),
 
-    {ok, C2} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C2),
-    {ok, #{}, [2]} = emqtt:subscribe(C2, <<"qos/+">>, 2),
-    ?assertEqual(3, length(receive_messages(3))),
-    ok = emqtt:disconnect(C2),
+    emqtt:publish(C1, <<"retained/0">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/1">>, #{'Message-Expiry-Interval' => 2}, <<"expire">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/2">>, #{'Message-Expiry-Interval' => 5}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/3">>, <<"don't expire">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"$SYS/retained/4">>, <<"don't expire">>, [{qos, 0}, {retain, true}]),
 
-    %% Expire
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/+">>, 0),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"$SYS/retained/+">>, 0),
+    ?assertEqual(5, length(receive_messages(5))),
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"retained/+">>),
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"$SYS/retained/+">>),
+
     timer:sleep(3000),
-    {ok, C3} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C3),
-    {ok, #{}, [0]} = emqtt:subscribe(C3, <<"qos/+">>, 0),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/+">>, 0),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"$SYS/retained/+">>, 0),
+    ?assertEqual(4, length(receive_messages(5))),
+
+    emqtt:publish(C1, <<"retained/0">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/1">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/2">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/3">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"$SYS/retained/4">>, <<"">>, [{qos, 0}, {retain, true}]),
+
+    ok = emqtt:disconnect(C1).
+
+t_message_expiry_2(_) ->
+    {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
+    {ok, _} = emqtt:connect(C1),
+    emqtt:publish(C1, <<"retained">>, <<"expire">>, [{qos, 0}, {retain, true}]),
+
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(1, length(receive_messages(1))),
+    timer:sleep(3000),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained">>, [{qos, 0}, {rh, 0}]),
     ?assertEqual(0, length(receive_messages(1))),
-    ok = emqtt:disconnect(C3),
+    {ok, #{}, [0]} = emqtt:unsubscribe(C1, <<"retained">>),
 
-    {ok, C4} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C4),
-    emqtt:publish(C4, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C4, <<"test/B">>, #{'Message-Expiry-Interval' => 2}, <<"expire">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C4, <<"test/C">>, #{'Message-Expiry-Interval' => 5}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
-    % emqtt:publish(C4, <<"test/D">>, <<"don't expire if retainer.expiry_interval equals to 0">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C4, <<"$SYS/E">>, <<"don't expire">>, [{qos, 0}, {retain, true}]),
-    timer:sleep(20),
-    ok = emqtt:disconnect(C4),
-    timer:sleep(3000),
+    emqtt:publish(C1, <<"retained">>, <<"">>, [{qos, 0}, {retain, true}]),
 
-    {ok, C5} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C5),
-    {ok, #{}, [0]} = emqtt:subscribe(C5, <<"test/C">>, 0),
-    ?assertEqual(1, length(receive_messages(1))),
-    {ok, #{}, [0]} = emqtt:subscribe(C5, <<"test/+">>, 0),
-    {ok, #{}, [0]} = emqtt:subscribe(C5, <<"$SYS/E">>, 0),
-    ?assertEqual(3, length(receive_messages(4))),
-    ok = emqtt:disconnect(C5).
+    ok = emqtt:disconnect(C1).
 
-%% expired message will be deleted by check timer
-t_expiry_timer(_) ->
+t_clean(_) ->
     {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
     {ok, _} = emqtt:connect(C1),
-    emqtt:publish(C1, <<"test/A">>, #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C1, <<"test/B">>, #{'Message-Expiry-Interval' => 1}, <<"expire">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C1, <<"test/C">>, <<"expire">>, [{qos, 0}, {retain, true}]),
-    ok = emqtt:disconnect(C1),
+    emqtt:publish(C1, <<"retained/0">>, <<"this is a retained message 0">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/1">>, <<"this is a retained message 1">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/test/0">>, <<"this is a retained message 2">>, [{qos, 0}, {retain, true}]),
 
-    timer:sleep(4000),
-    {ok, C2} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C2),
-    {ok, #{}, [0]} = emqtt:subscribe(C2, <<"test/+">>, 0),
-    ok = emqtt:disconnect(C2).
-
-t_subscribe_topics(_) ->
-    {ok, C1} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C1),
-    lists:foreach(fun(N) ->
-                          emqtt:publish(C1, nth(N, ?TOPICS), #{'Message-Expiry-Interval' => 0}, <<"don't expire">>, [{qos, 0}, {retain, true}])
-                  end, [1,2,3,4,5]),
-    timer:sleep(20),
-    ok = emqtt:disconnect(C1),
-    timer:sleep(10),
-    {ok, C2} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C2),
-    {ok, #{}, [0]} = emqtt:subscribe(C2, nth(1, ?WILD_TOPICS), 0),
-    ?assertEqual(2, length(receive_messages(2))),
-    ok = emqtt:disconnect(C2),
-
-    {ok, C3} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C3),
-    {ok, #{}, [0]} = emqtt:subscribe(C3, nth(2, ?WILD_TOPICS), 0),
-    ?assertEqual(2, length(receive_messages(2))),
-    ok = emqtt:disconnect(C3),
-
-    {ok, C4} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C4),
-    {ok, #{}, [0]} = emqtt:subscribe(C4, nth(5, ?WILD_TOPICS), 0),
-    ?assertEqual(1, length(receive_messages(1))),
-    ok = emqtt:disconnect(C4),
-
-    {ok, C5} = emqtt:start_link([{clean_start, true}, {proto_ver, v5}]),
-    {ok, _} = emqtt:connect(C5),
-    {ok, #{}, [0]} = emqtt:subscribe(C5, nth(6, ?WILD_TOPICS), 0),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/#">>, [{qos, 0}, {rh, 0}]),
     ?assertEqual(3, length(receive_messages(3))),
-    ok = emqtt:disconnect(C5).
+
+    emqx_retainer:clean(<<"retained/test/0">>),
+    emqx_retainer:clean(<<"retained/+">>),
+    {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/#">>, [{qos, 0}, {rh, 0}]),
+    ?assertEqual(0, length(receive_messages(3))),
+
+    ok = emqtt:disconnect(C1).
 
 %%--------------------------------------------------------------------
 %% Helper functions
