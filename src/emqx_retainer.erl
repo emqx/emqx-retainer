@@ -80,7 +80,6 @@ on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
 on_message_publish(Msg, _Env) ->
     {ok, Msg}.
 
-sort_retained([])    -> [];
 sort_retained([Msg]) -> [Msg];
 sort_retained(Msgs)  ->
     lists:sort(fun(#message{timestamp = Ts1}, #message{timestamp = Ts2}) ->
