@@ -54,16 +54,15 @@ load(Env) ->
     emqx:hook('session.subscribed', fun ?MODULE:on_session_subscribed/3, []),
     emqx:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]).
 
-on_session_subscribed(#{clientid := _ClientId}, Topic, #{rh := Rh, is_new := New}) ->
+on_session_subscribed(#{clientid := _ClientId}, Topic, #{rh := Rh, is_new := IsNew}) ->
     if
-        Rh =:= 0 orelse (Rh =:= 1 andalso New =:= true) ->
+        Rh =:= 0 orelse (Rh =:= 1 andalso IsNew) ->
             Msgs = case emqx_topic:wildcard(Topic) of
                        false -> read_messages(Topic);
                        true  -> match_messages(Topic)
                    end,
             dispatch_retained(Topic, Msgs);
-        true ->
-            ok
+        true -> ok
     end.
 
 %% RETAIN flag set to 1 and payload containing zero bytes
