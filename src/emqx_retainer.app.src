@@ -3,7 +3,7 @@
   {vsn, "git"},
   {modules, []},
   {registered, [emqx_retainer_sup]},
-  {applications, [kernel,stdlib,clique]},
+  {applications, [kernel,stdlib]},
   {mod, {emqx_retainer_app,[]}},
   {env, []},
   {licenses, ["Apache-2.0"]},
