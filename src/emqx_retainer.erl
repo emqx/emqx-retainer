@@ -92,11 +92,11 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
                 #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 ->
-                    emqx_time:now_ms(Ts) + Interval * 1000;
+                    Ts + Interval * 1000;
                 #message{timestamp = Ts} ->
                     case proplists:get_value(expiry_interval, Env, 0) of
                         0 -> 0;
-                        Interval -> emqx_time:now_ms(Ts) + Interval
+                        Interval -> Ts + Interval
                     end
             end,
             mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
