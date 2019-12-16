@@ -194,11 +194,11 @@ store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts},
             ExpiryTime = case Msg of
                 #message{topic = <<"$SYS/", _/binary>>} -> 0;
                 #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 ->
-                    emqx_time:now_ms(Ts) + Interval * 1000;
+                    Ts + Interval * 1000;
                 #message{timestamp = Ts} ->
                     case proplists:get_value(expiry_interval, Env, 0) of
                         0 -> 0;
-                        Interval -> emqx_time:now_ms(Ts) + Interval
+                        Interval -> Ts + Interval
                     end
             end,
             mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
@@ -223,7 +223,7 @@ read_messages(Topic) ->
         [#retained{msg = Msg, expiry_time = 0}] ->
             [Msg];
         [#retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime}] ->
-            case emqx_time:now_ms() >= ExpiryTime of
+            case erlang:system_time(millisecond) >= ExpiryTime of
                 true ->
                     mnesia:transaction(fun() -> mnesia:delete({?TAB, Topic}) end),
                     [];
@@ -240,7 +240,7 @@ match_messages(Filter) ->
             (#retained{topic = Name, msg = Msg, expiry_time = ExpiryTime}, {Unexpired, Expired}) ->
                 case emqx_topic:match(Name, Filter) of
                     true ->
-                        case ExpiryTime =/= 0 andalso emqx_time:now_ms() >= ExpiryTime of
+                        case ExpiryTime =/= 0 andalso erlang:system_time(millisecond) >= ExpiryTime of
                             true -> {Unexpired, [Msg | Expired]};
                             false ->
                                 {[Msg | Unexpired], Expired}
@@ -273,7 +273,7 @@ match_delete_messages(Filter) ->
 
 -spec(expire_messages() -> any()).
 expire_messages() ->
-    NowMs = emqx_time:now_ms(),
+    NowMs = erlang:system_time(millisecond),
     mnesia:transaction(
         fun() ->
             Match = ets:fun2ms(
