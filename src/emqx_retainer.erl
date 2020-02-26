@@ -67,6 +67,8 @@ on_session_subscribed(_, Topic, #{rh := Rh, is_new := IsNew}) ->
         true -> ok
     end.
 
+on_message_publish(Msg = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
+    {ok, Msg};
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #message{flags   = #{retain := true},
                                   topic   = Topic,
@@ -187,21 +189,22 @@ sort_retained(Msgs)  ->
                    Ts1 =< Ts2
                end, Msgs).
 
-store_retained(Msg = #message{topic = Topic, payload = Payload, timestamp = Ts}, Env) ->
+store_retained(Msg = #message{topic = Topic, payload = Payload}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
             ok = emqx_metrics:set('messages.retained', retained_count()),
-            ExpiryTime = case Msg of
-                #message{topic = <<"$SYS/", _/binary>>} -> 0;
-                #message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts} when Interval =/= 0 ->
-                    Ts + Interval * 1000;
-                #message{timestamp = Ts} ->
-                    case proplists:get_value(expiry_interval, Env, 0) of
-                        0 -> 0;
-                        Interval -> Ts + Interval
-                    end
-            end,
-            mnesia:dirty_write(?TAB, #retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime});
+            mnesia:dirty_write(?TAB, #retained{topic = Topic,
+                                               msg = Msg,
+                                               expiry_time = get_expiry_time(Msg, Env)});
+        {true, false} ->
+            case mnesia:dirty_read(?TAB, Topic) of
+                [_] ->
+                    mnesia:dirty_write(?TAB, #retained{topic = Topic,
+                                                       msg = Msg,
+                                                       expiry_time = get_expiry_time(Msg, Env)});
+                [] ->
+                    ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic])
+            end;
         {true, _} ->
             ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true} ->
@@ -216,6 +219,14 @@ is_table_full(Env) ->
 is_too_big(Size, Env) ->
     Limit = proplists:get_value(max_payload_size, Env, 0),
     Limit > 0 andalso (Size > Limit).
+
+get_expiry_time(#message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts}, _Env) ->
+    Ts + Interval * 1000;
+get_expiry_time(#message{timestamp = Ts}, Env) ->
+    case proplists:get_value(expiry_interval, Env, 0) of
+        0 -> 0;
+        Interval -> Ts + Interval
+    end.
 
 -spec(read_messages(binary()) -> [emqx_types:message()]).
 read_messages(Topic) ->
