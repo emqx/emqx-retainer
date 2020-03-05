@@ -218,6 +218,8 @@ is_too_big(Size, Env) ->
     Limit = proplists:get_value(max_payload_size, Env, 0),
     Limit > 0 andalso (Size > Limit).
 
+get_expiry_time(#message{headers = #{'Message-Expiry-Interval' := 0}}, _Env) ->
+    0;
 get_expiry_time(#message{headers = #{'Message-Expiry-Interval' := Interval}, timestamp = Ts}, _Env) ->
     Ts + Interval * 1000;
 get_expiry_time(#message{timestamp = Ts}, Env) ->
