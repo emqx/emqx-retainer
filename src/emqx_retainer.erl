@@ -67,8 +67,6 @@ on_session_subscribed(_, Topic, #{rh := Rh, is_new := IsNew}) ->
         true -> ok
     end.
 
-on_message_publish(Msg = #message{topic = <<"$SYS/", _/binary>>}, _Env) ->
-    {ok, Msg};
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #message{flags   = #{retain := true},
                                   topic   = Topic,
