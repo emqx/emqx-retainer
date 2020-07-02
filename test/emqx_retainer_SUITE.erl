@@ -27,35 +27,30 @@
 all() -> emqx_ct:all(?MODULE).
 
 %%--------------------------------------------------------------------
-%% CT Callbacks
+%% Setups
 %%--------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    emqx_ct_helpers:start_apps([emqx, emqx_retainer]),
+    emqx_ct_helpers:start_apps([emqx_retainer]),
     Config.
 
 end_per_suite(_Config) ->
-    emqx_ct_helpers:stop_apps([emqx_retainer, emqx]).
+    emqx_ct_helpers:stop_apps([emqx_retainer]).
 
 init_per_testcase(TestCase, Config) ->
     emqx_retainer:clean(<<"#">>),
     case TestCase of
         t_message_expiry_2 ->
             application:set_env(emqx_retainer, expiry_interval, 2000);
-        t_expiry_timer ->
-            application:set_env(emqx_retainer, expiry_interval, 2000);
         _ ->
             application:set_env(emqx_retainer, expiry_interval, 0)
     end,
+    application:stop(emqx_retainer),
     application:ensure_all_started(emqx_retainer),
     Config.
 
-end_per_testcase(_TestCase, Config) ->
-    application:stop(emqx_retainer),
-    Config.
-
 %%--------------------------------------------------------------------
-%% Test cases for retainer
+%% Test Cases
 %%--------------------------------------------------------------------
 
 t_store_and_clean(_) ->

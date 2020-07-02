@@ -23,6 +23,8 @@
 -include_lib("emqx/include/logger.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
+-logger_header("[Retainer]").
+
 -export([start_link/1]).
 
 -export([ load/1
@@ -61,17 +63,24 @@ unload() ->
 on_session_subscribed(_, _, #{share := ShareName}) when ShareName =/= undefined ->
     ok;
 on_session_subscribed(_, Topic, #{rh := Rh, is_new := IsNew}) ->
-    if
-        Rh =:= 0 orelse (Rh =:= 1 andalso IsNew) ->
-            gen_server:cast(?MODULE, {dispatch, self(), Topic});
-        true -> ok
+    case Rh =:= 0 orelse (Rh =:= 1 andalso IsNew) of
+        true -> emqx_pool:async_submit(fun dispatch/2, [self(), Topic]);
+        _ -> ok
     end.
+
+%% @private
+dispatch(Pid, Topic) ->
+    Msgs = case emqx_topic:wildcard(Topic) of
+               false -> read_messages(Topic);
+               true  -> match_messages(Topic)
+           end,
+    [Pid ! {deliver, Topic, Msg} || Msg  <- sort_retained(Msgs)].
 
 %% RETAIN flag set to 1 and payload containing zero bytes
 on_message_publish(Msg = #message{flags   = #{retain := true},
                                   topic   = Topic,
                                   payload = <<>>}, _Env) ->
-    mnesia:dirty_delete(?TAB, Topic),
+    mnesia:dirty_delete(?TAB, topic2tokens(Topic)),
     {ok, Msg};
 
 on_message_publish(Msg = #message{flags = #{retain := true}}, Env) ->
@@ -82,7 +91,7 @@ on_message_publish(Msg, _Env) ->
     {ok, Msg}.
 
 %%--------------------------------------------------------------------
-%% API
+%% APIs
 %%--------------------------------------------------------------------
 
 %% @doc Start the retainer
@@ -90,14 +99,16 @@ on_message_publish(Msg, _Env) ->
 start_link(Env) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Env], []).
 
+-spec(clean(emqx_types:topic()) -> non_neg_integer()).
 clean(Topic) when is_binary(Topic) ->
     case emqx_topic:wildcard(Topic) of
         true -> match_delete_messages(Topic);
         false ->
+            Tokens = topic2tokens(Topic),
             Fun = fun() ->
-                      case mnesia:read({?TAB, Topic}) of
+                      case mnesia:read({?TAB, Tokens}) of
                           [] -> 0;
-                          [_M] -> mnesia:delete({?TAB, Topic}), 1
+                          [_M] -> mnesia:delete({?TAB, Tokens}), 1
                       end
                   end,
             {atomic, N} = mnesia:transaction(Fun), N
@@ -143,19 +154,11 @@ start_expire_timer(Ms, State) ->
     State#state{expiry_timer = Timer}.
 
 handle_call(Req, _From, State) ->
-    ?LOG(error, "[Retainer] Unexpected call: ~p", [Req]),
+    ?LOG(error, "Unexpected call: ~p", [Req]),
     {reply, ignored, State}.
 
-handle_cast({dispatch, Pid, Topic}, State) ->
-    Msgs = case emqx_topic:wildcard(Topic) of
-                       false -> read_messages(Topic);
-                       true  -> match_messages(Topic)
-                   end,
-            [Pid ! {deliver, Topic, Msg} || Msg  <- sort_retained(Msgs)],
-    {noreply, State};
-
 handle_cast(Msg, State) ->
-    ?LOG(error, "[Retainer] Unexpected cast: ~p", [Msg]),
+    ?LOG(error, "Unexpected cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(stats, State = #state{stats_fun = StatsFun}) ->
@@ -167,7 +170,7 @@ handle_info(expire, State) ->
     {noreply, State, hibernate};
 
 handle_info(Info, State) ->
-    ?LOG(error, "[Retainer] Unexpected info: ~p", [Info]),
+    ?LOG(error, "Unexpected info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, _State = #state{stats_timer = TRef1, expiry_timer = TRef2}) ->
@@ -191,23 +194,23 @@ store_retained(Msg = #message{topic = Topic, payload = Payload}, Env) ->
     case {is_table_full(Env), is_too_big(size(Payload), Env)} of
         {false, false} ->
             ok = emqx_metrics:set('messages.retained', retained_count()),
-            mnesia:dirty_write(?TAB, #retained{topic = Topic,
+            mnesia:dirty_write(?TAB, #retained{topic = topic2tokens(Topic),
                                                msg = Msg,
                                                expiry_time = get_expiry_time(Msg, Env)});
         {true, false} ->
             case mnesia:dirty_read(?TAB, Topic) of
                 [_] ->
-                    mnesia:dirty_write(?TAB, #retained{topic = Topic,
+                    mnesia:dirty_write(?TAB, #retained{topic = topic2tokens(Topic),
                                                        msg = Msg,
                                                        expiry_time = get_expiry_time(Msg, Env)});
                 [] ->
-                    ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic])
+                    ?LOG(error, "Cannot retain message(topic=~s) for table is full!", [Topic])
             end;
         {true, _} ->
-            ?LOG(error, "[Retainer] Cannot retain message(topic=~s) for table is full!", [Topic]);
+            ?LOG(error, "Cannot retain message(topic=~s) for table is full!", [Topic]);
         {_, true} ->
-            ?LOG(error, "[Retainer] Cannot retain message(topic=~s, payload_size=~p) "
-                              "for payload is too big!", [Topic, iolist_size(Payload)])
+            ?LOG(error, "Cannot retain message(topic=~s, payload_size=~p) "
+                        "for payload is too big!", [Topic, iolist_size(Payload)])
     end.
 
 is_table_full(Env) ->
@@ -228,74 +231,67 @@ get_expiry_time(#message{timestamp = Ts}, Env) ->
         Interval -> Ts + Interval
     end.
 
--spec(read_messages(binary()) -> [emqx_types:message()]).
-read_messages(Topic) ->
-    case mnesia:dirty_read(?TAB, Topic) of
-        [#retained{msg = Msg, expiry_time = 0}] ->
-            [Msg];
-        [#retained{topic = Topic, msg = Msg, expiry_time = ExpiryTime}] ->
-            case erlang:system_time(millisecond) >= ExpiryTime of
-                true ->
-                    mnesia:transaction(fun() -> mnesia:delete({?TAB, Topic}) end),
-                    [];
-                false ->
-                    [Msg]
-            end;
-        [] -> []
-    end.
-
--spec(match_messages(binary()) -> [emqx_types:message()]).
-match_messages(Filter) ->
-    %% TODO: optimize later...
-    Fun = fun
-            (#retained{topic = Name, msg = Msg, expiry_time = ExpiryTime}, {Unexpired, Expired}) ->
-                case emqx_topic:match(Name, Filter) of
-                    true ->
-                        case ExpiryTime =/= 0 andalso erlang:system_time(millisecond) >= ExpiryTime of
-                            true -> {Unexpired, [Msg | Expired]};
-                            false ->
-                                {[Msg | Unexpired], Expired}
-                        end;
-                    false -> {Unexpired, Expired}
-                end
-            end,
-    {Unexpired, Expired} = mnesia:async_dirty(fun mnesia:foldl/3, [Fun, {[], []}, ?TAB]),
-    mnesia:transaction(
-        fun() ->
-            lists:foreach(fun(Msg) -> mnesia:delete({?TAB, Msg#message.topic}) end, Expired)
-        end),
-    Unexpired.
-
--spec(match_delete_messages(binary()) -> integer()).
-match_delete_messages(Filter) ->
-    %% TODO: optimize later...
-    Fun = fun(#retained{topic = Name}, Topics) ->
-              case emqx_topic:match(Name, Filter) of
-                true -> mnesia:delete({?TAB, Name}), [Name | Topics];
-                false -> Topics
-              end
-          end,
-    Topics = mnesia:async_dirty(fun mnesia:foldl/3, [Fun, [], ?TAB]),
-    mnesia:transaction(
-        fun() ->
-            lists:foreach(fun(Topic) -> mnesia:delete({?TAB, Topic}) end, Topics)
-        end),
-    length(Topics).
-
--spec(expire_messages() -> any()).
-expire_messages() ->
-    NowMs = erlang:system_time(millisecond),
-    mnesia:transaction(
-        fun() ->
-            Match = ets:fun2ms(
-                        fun(#retained{topic = Topic, expiry_time = ExpiryTime})
-                            when ExpiryTime =/= 0 andalso NowMs > ExpiryTime -> Topic
-                        end),
-            Topics = mnesia:select(?TAB, Match, write),
-            lists:foreach(fun(Topic) -> mnesia:delete({?TAB, Topic})
-                           end, Topics)
-        end).
+%%--------------------------------------------------------------------
+%% Internal funcs
+%%--------------------------------------------------------------------
 
 -spec(retained_count() -> non_neg_integer()).
 retained_count() -> mnesia:table_info(?TAB, size).
 
+topic2tokens(Topic) ->
+    emqx_topic:words(Topic).
+
+expire_messages() ->
+    NowMs = erlang:system_time(millisecond),
+    MsHd = #retained{topic = '$1', msg = '_', expiry_time = '$3'},
+    Ms = [{MsHd, [{'=/=','$3',0}, {'<','$3',NowMs}], ['$1']}],
+    mnesia:transaction(
+        fun() ->
+            Keys = mnesia:select(?TAB, Ms, write),
+            lists:foreach(fun(Key) -> mnesia:delete({?TAB, Key}) end, Keys)
+        end).
+
+-spec(read_messages(emqx_types:topic())
+      -> [emqx_types:message()]).
+read_messages(Topic) ->
+    Tokens = topic2tokens(Topic),
+    case mnesia:dirty_read(?TAB, Tokens) of
+        [] -> [];
+        [#retained{msg = Msg, expiry_time = Et}] ->
+            case Et =:= 0 orelse Et >= erlang:system_time(millisecond) of
+                true -> [Msg];
+                false -> []
+            end
+    end.
+
+-spec(match_messages(emqx_types:topic())
+      -> [emqx_types:message()]).
+match_messages(Filter) ->
+    NowMs = erlang:system_time(millisecond),
+    Cond = condition(emqx_topic:words(Filter)),
+    MsHd = #retained{topic = Cond, msg = '$2', expiry_time = '$3'},
+    Ms = [{MsHd, [{'=:=','$3',0}], ['$2']},
+          {MsHd, [{'>','$3',NowMs}], ['$2']}],
+    mnesia:dirty_select(?TAB, Ms).
+
+-spec(match_delete_messages(emqx_types:topic())
+      -> DeletedCnt :: non_neg_integer()).
+match_delete_messages(Filter) ->
+    Cond = condition(emqx_topic:words(Filter)),
+    MsHd = #retained{topic = Cond, msg = '_', expiry_time = '_'},
+    Ms = [{MsHd, [], ['$_']}],
+    Rs = mnesia:dirty_select(?TAB, Ms),
+    lists:foreach(fun(R) -> mnesia:dirty_delete_object(?TAB, R) end, Rs),
+    length(Rs).
+
+%% @private
+condition(Ws) ->
+    case lists:last(Ws) =:= '#' of
+        false ->
+            [case W =:= '+' of
+                 true -> '_';
+                 _ -> W
+             end || W <- Ws];
+        _ ->
+            (Ws -- ['#']) ++ '_'
+    end.
