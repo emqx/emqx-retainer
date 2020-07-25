@@ -100,14 +100,15 @@ t_wildcard_subscription(_) ->
     {ok, _} = emqtt:connect(C1),
     emqtt:publish(C1, <<"retained/0">>, <<"this is a retained message 0">>, [{qos, 0}, {retain, true}]),
     emqtt:publish(C1, <<"retained/1">>, <<"this is a retained message 1">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C1, <<"retained/2">>, <<"this is a retained message 2">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/a/b/c">>, <<"this is a retained message 2">>, [{qos, 0}, {retain, true}]),
 
     {ok, #{}, [0]} = emqtt:subscribe(C1,  <<"retained/+">>, 0),
+    {ok, #{}, [0]} = emqtt:subscribe(C1,  <<"retained/+/b/#">>, 0),
     ?assertEqual(3, length(receive_messages(3))),
 
     emqtt:publish(C1, <<"retained/0">>, <<"">>, [{qos, 0}, {retain, true}]),
     emqtt:publish(C1, <<"retained/1">>, <<"">>, [{qos, 0}, {retain, true}]),
-    emqtt:publish(C1, <<"retained/2">>, <<"">>, [{qos, 0}, {retain, true}]),
+    emqtt:publish(C1, <<"retained/a/b/c">>, <<"">>, [{qos, 0}, {retain, true}]),
     ok = emqtt:disconnect(C1).
 
 t_message_expiry(_) ->
@@ -165,8 +166,8 @@ t_clean(_) ->
     {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/#">>, [{qos, 0}, {rh, 0}]),
     ?assertEqual(3, length(receive_messages(3))),
 
-    emqx_retainer:clean(<<"retained/test/0">>),
-    emqx_retainer:clean(<<"retained/+">>),
+    1 = emqx_retainer:clean(<<"retained/test/0">>),
+    2 = emqx_retainer:clean(<<"retained/+">>),
     {ok, #{}, [0]} = emqtt:subscribe(C1, <<"retained/#">>, [{qos, 0}, {rh, 0}]),
     ?assertEqual(0, length(receive_messages(3))),
 
