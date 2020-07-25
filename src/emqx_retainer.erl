@@ -286,12 +286,8 @@ match_delete_messages(Filter) ->
 
 %% @private
 condition(Ws) ->
-    case lists:last(Ws) =:= '#' of
-        false ->
-            [case W =:= '+' of
-                 true -> '_';
-                 _ -> W
-             end || W <- Ws];
-        _ ->
-            (Ws -- ['#']) ++ '_'
+    Ws1 = [case W =:= '+' of true -> '_'; _ -> W end || W <- Ws],
+    case lists:last(Ws1) =:= '#' of
+        false -> Ws1;
+        _ -> (Ws1 -- ['#']) ++ '_'
     end.
