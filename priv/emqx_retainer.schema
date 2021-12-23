@@ -28,10 +28,3 @@
   {default, 0},
   {datatype, [integer, {duration, ms}]}
 ]}.
-
-%% Stop publish clear message
-%% {$configurable}
-{mapping, "retainer.stop_publish_clear_msg", "emqx_retainer.stop_publish_clear_msg", [
-  {default, false},
-  {datatype, {enum, [true, false]}}
-]}.
